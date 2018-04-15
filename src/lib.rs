@@ -25,30 +25,30 @@ pub struct TinyStore {
 impl Default for TinyStore {
 
     // Set default values for TinyStore struct, if user chooses not to specify custom parameters
-    fn default() -> TinyStore {        
+    fn default() -> TinyStore {
 
         TinyStore {
             path: Some(PathBuf::from("./tmp/database.json")),
             hash: None,
-            storage: KeyValue::new(), 
+            storage: KeyValue::new(),
         }
     }
 }
 
 impl TinyStore {
-    
 
-    // Creates a new TinyStore object without any configuration. 
+
+    // Creates a new TinyStore object without any configuration.
     // Assumes user is utilizing now hashing algorithm and wants to persist data in a file.
     pub fn quick_new() -> TinyStore {
         // Creates a new database utilizing default struct values
         TinyStore::default()
     }
-    
+
     // Creates a new TinyStore object with configuration supplied by parameters
     pub fn new(path: Option<String>, hash_algo: Option<String>) -> TinyStore {
-        
-        // Check if path was supplied 
+
+        // Check if path was supplied
         if let None = path {
             // Create new TinyStore with no path
             TinyStore {
@@ -65,23 +65,22 @@ impl TinyStore {
             }
         }
     }
-    
-    pub fn write<T: Serialize>(&self, key: String, value: &T) -> Result<(), StoreError> {
-        let kv = KeyValue::new();
-    
-        
-        Ok(())
-    }   
-    
-    /*
-    pub fn get(self, id: String) -> Result<(), StoreError> {
 
+    // Writes to TinyStore key-value container, without commiting to file
+    pub fn write(&mut self, key: String, value: Value){
+        let _ = self.storage.insert(key, value);
     }
 
+    // Retrieves a value from TinyStore with key
+    pub fn get(self, id: String) -> Result<(), StoreError> {
+        
+    }
+
+    /*
     pub fn get_all(self) -> Result<Vec<Container>, StoreError> {
 
     }
-    
+
     pub fn delete(self, id: String) -> Result<(), StoreError> {
 
     }
