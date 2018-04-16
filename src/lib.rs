@@ -13,7 +13,7 @@ use std::path::PathBuf;
 type KeyValue = Map<String, Value>;
 
 pub enum StoreError {
-    TinyStoreNew(String),
+    KeyNotFound(String),
 }
 
 pub struct TinyStore {
@@ -36,7 +36,6 @@ impl Default for TinyStore {
 }
 
 impl TinyStore {
-
 
     // Creates a new TinyStore object without any configuration.
     // Assumes user is utilizing now hashing algorithm and wants to persist data in a file.
@@ -69,18 +68,26 @@ impl TinyStore {
     // Writes to TinyStore key-value container, without commiting to file
     pub fn write(&mut self, key: String, value: Value){
         let _ = self.storage.insert(key, value);
+        // TODO: implement hash algo
     }
 
     // Retrieves a value from TinyStore with key
-    pub fn get(self, id: String) -> Result<(), StoreError> {
-        
+    pub fn get(&mut self, id: String) -> Result<Value, StoreError> {
+
+        // Check to see if container contains the key
+        if self.storage.contains_key(&id) == false {
+            return Err(StoreError::KeyNotFound(id));
+        }
+
+        let val = self.storage.get_mut(&id).unwrap();
+        Ok(val.take())
+    }
+
+    pub fn get_all(&mut self) -> Result<Vec<KeyValue>, StoreError> {
+        // TODO: iterator
     }
 
     /*
-    pub fn get_all(self) -> Result<Vec<Container>, StoreError> {
-
-    }
-
     pub fn delete(self, id: String) -> Result<(), StoreError> {
 
     }
