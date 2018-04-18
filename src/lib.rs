@@ -1,6 +1,8 @@
 extern crate crypto;
 extern crate base64;
 extern crate serde;
+
+#[macro_use]
 extern crate serde_json;
 
 use serde::{Serialize, Deserialize};
@@ -9,9 +11,27 @@ use serde_json::{Map, Value};
 use std::fs;
 use std::path::PathBuf;
 
+#[cfg(test)]
+mod tests {
+    use super::TinyStore;
+
+    #[test]
+    fn it_works() {
+        let mut t = TinyStore::new(None, None);
+        t.write(String::from("key1"), json!("a value"));
+
+        match t.get(String::from("key1")){
+            Ok(v) => println!("{:?}", v),
+            Err(e) => panic!("{:?}", e),
+        }
+
+    }
+}
+
 // Rather than using a HashMap, a Map is much more optimized for JSON interactions
 type KeyValue = Map<String, Value>;
 
+#[derive(Debug)]
 pub enum StoreError {
     KeyNotFound(String),
 }
@@ -83,11 +103,11 @@ impl TinyStore {
         Ok(val.take())
     }
 
+    /*
     pub fn get_all(&mut self) -> Result<Vec<KeyValue>, StoreError> {
         // TODO: iterator
     }
 
-    /*
     pub fn delete(self, id: String) -> Result<(), StoreError> {
 
     }
@@ -101,12 +121,4 @@ impl TinyStore {
 
     }
     */
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
 }
