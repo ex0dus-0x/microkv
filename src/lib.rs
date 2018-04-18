@@ -1,14 +1,13 @@
 extern crate crypto;
 extern crate base64;
 extern crate serde;
-
-#[macro_use]
 extern crate serde_json;
+
+use crypto::digest::Digest;
 
 use serde::{Serialize, Deserialize};
 use serde_json::{Map, Value};
 
-use std::fs;
 use std::path::PathBuf;
 
 #[cfg(test)]
@@ -34,18 +33,19 @@ type KeyValue = Map<String, Value>;
 #[derive(Debug)]
 pub enum StoreError {
     KeyNotFound(String),
+    CommitError(String),
 }
 
-pub struct TinyStore {
+pub struct TinyStore<T> {
     path: Option<PathBuf>,          // this is the path where the database file will be written to, if the user chooses to commit
-    hash: Option<String>,           // implement a hash algorithm for values that store sensitive data, if the user chooses to
+    hash: Option<T>,                // implement a hash algorithm for values that store sensitive data, if the user chooses to
     storage: KeyValue,
 }
 
-impl Default for TinyStore {
+impl<T: Digest> Default for TinyStore<T> {
 
     // Set default values for TinyStore struct, if user chooses not to specify custom parameters
-    fn default() -> TinyStore {
+    fn default() -> TinyStore<T> {
 
         TinyStore {
             path: Some(PathBuf::from("./tmp/database.json")),
@@ -55,17 +55,18 @@ impl Default for TinyStore {
     }
 }
 
-impl TinyStore {
+
+impl<T: Digest> TinyStore<T> {
 
     // Creates a new TinyStore object without any configuration.
     // Assumes user is utilizing now hashing algorithm and wants to persist data in a file.
-    pub fn quick_new() -> TinyStore {
+    pub fn quick_new() -> TinyStore<T> {
         // Creates a new database utilizing default struct values
         TinyStore::default()
     }
 
     // Creates a new TinyStore object with configuration supplied by parameters
-    pub fn new(path: Option<String>, hash_algo: Option<String>) -> TinyStore {
+    pub fn new(path: Option<String>, hash_algo: Option<T>) -> TinyStore<T> {
 
         // Check if path was supplied
         if let None = path {
@@ -99,26 +100,44 @@ impl TinyStore {
             return Err(StoreError::KeyNotFound(id));
         }
 
+        // Retrieve mutable value from key
         let val = self.storage.get_mut(&id).unwrap();
         Ok(val.take())
     }
 
-    /*
     pub fn get_all(&mut self) -> Result<Vec<KeyValue>, StoreError> {
-        // TODO: iterator
+
     }
 
     pub fn delete(self, id: String) -> Result<(), StoreError> {
 
     }
 
-    pub fn commit(self) -> Result<(), StoreError> {
-        // check to see if PathBuf is path to a file, not directory
+    pub fn commit(&self) -> Result<(), StoreError> {
 
+        // Create a string from KeyValue container
+        let json_data = self.convert_to_string();
+
+        // File creation
+        let target_file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&self.path.unwrap());
+
+        // Ensure mutex lock for one thread write only
+        target_file.lock_exclusive();
+
+        match Write::write_all(&mut target_file, json_data.as_bytes()){
+            Err(e) => Err(StoreError::CommitError(e)),
+            Ok(_) => target_file.unlock(),
+        }
+
+        Ok(())
     }
 
     pub fn destruct(self) -> Result<(), StoreError> {
-
+        // Find file path
+        // Delete file
     }
-    */
 }
