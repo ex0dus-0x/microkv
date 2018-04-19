@@ -2,13 +2,18 @@ extern crate crypto;
 extern crate base64;
 extern crate serde;
 extern crate serde_json;
+extern crate fs2;
 
 use crypto::digest::Digest;
 
 use serde::{Serialize, Deserialize};
 use serde_json::{Map, Value};
 
+use fs2::FileExt;
+
 use std::path::PathBuf;
+use std::io::Write;
+use std::fs::OpenOptions;
 
 #[cfg(test)]
 mod tests {
@@ -33,7 +38,7 @@ type KeyValue = Map<String, Value>;
 #[derive(Debug)]
 pub enum StoreError {
     KeyNotFound(String),
-    CommitError(String),
+    CommitError,
 }
 
 pub struct TinyStore<T> {
@@ -57,6 +62,11 @@ impl<T: Digest> Default for TinyStore<T> {
 
 
 impl<T: Digest> TinyStore<T> {
+
+    // Convert to JSON, then to String
+    fn convert_to_string(&mut self){
+        
+    }
 
     // Creates a new TinyStore object without any configuration.
     // Assumes user is utilizing now hashing algorithm and wants to persist data in a file.
@@ -123,13 +133,13 @@ impl<T: Digest> TinyStore<T> {
             .write(true)
             .create(true)
             .truncate(false)
-            .open(&self.path.unwrap());
+            .open(&self.path.unwrap()).unwrap();
 
         // Ensure mutex lock for one thread write only
         target_file.lock_exclusive();
 
         match Write::write_all(&mut target_file, json_data.as_bytes()){
-            Err(e) => Err(StoreError::CommitError(e)),
+            Err(e) => Err(StoreError::CommitError),
             Ok(_) => target_file.unlock(),
         }
 
