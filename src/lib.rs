@@ -7,6 +7,7 @@ extern crate serde_json;
 extern crate fs2;
 
 use crypto::digest::Digest;
+use crypto::sha2::Sha256;
 
 use serde_json::{Map, Value};
 
@@ -20,23 +21,25 @@ use std::error::Error;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crypto::sha2::Sha256;
 
     #[test]
     fn test_get() {
         let mut t = TinyStore::default();
         t.write(String::from("key1"), json!("a value"));
+        t.write(String::from("key2"), json!("another value"));
+        t.write(String::from("key3"), json!("a third value"));
 
         match t.get(String::from("key1")){
             Ok(v) => println!("{:?}", v),
             Err(e) => panic!("{:?}", e),
         }
+
+        let _ = t.commit();
     }
 
     #[test]
     fn test_encrypted_get() {
-        let hash = Sha256::new();
-        let mut t = TinyStore::new(None, Some(hash));
+        let mut t = TinyStore::new(None, true);
         t.write(String::from("key1"), json!("a value"));
 
         match t.get(String::from("key1")){
@@ -59,42 +62,43 @@ pub enum StoreError {
     KeyValueImbalance,
 }
 
-pub struct TinyStore<T> {
+pub struct TinyStore {
     path: Option<PathBuf>,          // this is the path where the database file will be written to, if the user chooses to commit
-    hash: Option<T>,                // implement a hash algorithm for values that store sensitive data, if the user chooses to
+    hash: bool,                // implement a hash algorithm for values that store sensitive data, if the user chooses to
     storage: KeyValue,
 }
 
-impl<T: Digest> Default for TinyStore<T> {
+impl Default for TinyStore {
 
     // Set default values for TinyStore struct, if user chooses not to specify custom parameters
-    fn default() -> TinyStore<T> {
+    fn default() -> TinyStore {
 
         TinyStore {
-            path: Some(PathBuf::from("./tmp/database.json")),
-            hash: None,
+            path: Some(PathBuf::from("database.json")),
+            hash: false,
             storage: KeyValue::new(),
         }
     }
 }
 
 
-impl<T: Digest> TinyStore<T> {
+impl TinyStore {
 
     // Convert to JSON, then to String
     fn convert_to_string(&mut self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(&self.storage).map_err(|err| err)
+        let storage = self.storage.clone();
+        serde_json::to_string(&storage).map_err(|err| err)
     }
 
     // Creates a new TinyStore object without any configuration.
     // Assumes user is utilizing now hashing algorithm and wants to persist data in a file.
-    pub fn quick_new() -> TinyStore<T> {
+    pub fn quick_new() -> TinyStore {
         // Creates a new database utilizing default struct values
         TinyStore::default()
     }
 
     // Creates a new TinyStore object with configuration supplied by parameters
-    pub fn new(path: Option<String>, hash_algo: Option<T>) -> TinyStore<T> {
+    pub fn new(path: Option<String>, hash_algo: bool) -> TinyStore {
 
         // Check if path was supplied
         if let None = path {
@@ -117,9 +121,10 @@ impl<T: Digest> TinyStore<T> {
     // Writes to TinyStore key-value container, without commiting to file
     pub fn write(&mut self, key: String, value: Value) -> () {
 
-        if let Some(ref mut hash_algo) = self.hash {
-            hash_algo.input(key.as_bytes());
-            let _ = self.storage.insert(key, json!(hash_algo.result_str()));
+        if let true = self.hash {
+            let mut hash = Sha256::new();
+            hash.input(key.as_bytes());
+            let _ = self.storage.insert(key, json!(hash.result_str()));
         } else {
             let _ = self.storage.insert(key, value);
         }
@@ -136,7 +141,9 @@ impl<T: Digest> TinyStore<T> {
         // Retrieve mutable value from key
         let val = self.storage.get_mut(&id)
                         .unwrap();
-        Ok(val.take())
+
+        // Return clone of value, to prevent moving
+        Ok(val.clone().take())
     }
 
     /*
@@ -165,6 +172,12 @@ impl<T: Digest> TinyStore<T> {
         Ok(())
     }
 
+    // Delete the storage structure
+    pub fn destruct(&mut self) -> () {
+        self.storage.clear();
+    }
+
+    // Commit the storage structure, creating a JSON file
     pub fn commit(&mut self) -> Result<(), StoreError> {
 
         // Create a string from KeyValue container
@@ -193,16 +206,9 @@ impl<T: Digest> TinyStore<T> {
                 let error = String::from(e.description());
                 return Err(StoreError::CommitError(error));
             },
-            Ok(_) => { target_file.unlock(); },
+            Ok(_) => { let _ = target_file.unlock(); },
         }
 
         Ok(())
     }
-
-    /*
-    pub fn destruct(self) -> Result<(), StoreError> {
-        // Find file path
-        // Delete file
-    }
-    */
 }
