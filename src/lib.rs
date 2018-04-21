@@ -1,12 +1,13 @@
 extern crate crypto;
 extern crate base64;
 extern crate serde;
+
+#[macro_use]
 extern crate serde_json;
 extern crate fs2;
 
 use crypto::digest::Digest;
 
-use serde::{Serialize, Deserialize};
 use serde_json::{Map, Value};
 
 use fs2::FileExt;
@@ -14,21 +15,34 @@ use fs2::FileExt;
 use std::path::PathBuf;
 use std::io::Write;
 use std::fs::OpenOptions;
+use std::error::Error;
 
 #[cfg(test)]
 mod tests {
-    use super::TinyStore;
+    use super::*;
+    use crypto::sha2::Sha256;
 
     #[test]
-    fn it_works() {
-        let mut t = TinyStore::new(None, None);
+    fn test_get() {
+        let mut t = TinyStore::default();
         t.write(String::from("key1"), json!("a value"));
 
         match t.get(String::from("key1")){
             Ok(v) => println!("{:?}", v),
             Err(e) => panic!("{:?}", e),
         }
+    }
 
+    #[test]
+    fn test_encrypted_get() {
+        let hash = Sha256::new();
+        let mut t = TinyStore::new(None, Some(hash));
+        t.write(String::from("key1"), json!("a value"));
+
+        match t.get(String::from("key1")){
+            Ok(v) => println!("{:?}", v),
+            Err(e) => panic!("{:?}", e),
+        }
     }
 }
 
@@ -38,7 +52,11 @@ type KeyValue = Map<String, Value>;
 #[derive(Debug)]
 pub enum StoreError {
     KeyNotFound(String),
-    CommitError,
+    SerializeError(String),
+    CommitError(String),
+    IsEmpty,
+    NotFound,
+    KeyValueImbalance,
 }
 
 pub struct TinyStore<T> {
@@ -64,8 +82,8 @@ impl<T: Digest> Default for TinyStore<T> {
 impl<T: Digest> TinyStore<T> {
 
     // Convert to JSON, then to String
-    fn convert_to_string(&mut self){
-        
+    fn convert_to_string(&mut self) -> Result<String, serde_json::Error> {
+        serde_json::to_string(&self.storage).map_err(|err| err)
     }
 
     // Creates a new TinyStore object without any configuration.
@@ -97,9 +115,14 @@ impl<T: Digest> TinyStore<T> {
     }
 
     // Writes to TinyStore key-value container, without commiting to file
-    pub fn write(&mut self, key: String, value: Value){
-        let _ = self.storage.insert(key, value);
-        // TODO: implement hash algo
+    pub fn write(&mut self, key: String, value: Value) -> () {
+
+        if let Some(ref mut hash_algo) = self.hash {
+            hash_algo.input(key.as_bytes());
+            let _ = self.storage.insert(key, json!(hash_algo.result_str()));
+        } else {
+            let _ = self.storage.insert(key, value);
+        }
     }
 
     // Retrieves a value from TinyStore with key
@@ -111,43 +134,75 @@ impl<T: Digest> TinyStore<T> {
         }
 
         // Retrieve mutable value from key
-        let val = self.storage.get_mut(&id).unwrap();
+        let val = self.storage.get_mut(&id)
+                        .unwrap();
         Ok(val.take())
     }
 
-    pub fn get_all(&mut self) -> Result<Vec<KeyValue>, StoreError> {
+    /*
+    pub fn get_all(&mut self) -> Result<(), StoreError> {
+
+        // Check if container is empty
+        if self.storage.is_empty() == true {
+            return Err(StoreError::IsEmpty);
+        }
+
+        if self.storage.keys().len() != self.storage.len() && self.storage.values().len() != self.storage.len() {
+            return Err(StoreError::KeyValueImbalance)
+        }
 
     }
+    */
 
-    pub fn delete(self, id: String) -> Result<(), StoreError> {
+    pub fn delete(&mut self, id: String) -> Result<(), StoreError> {
+        // Check to see if container contains the key
+        if self.storage.contains_key(&id) == false {
+            return Err(StoreError::KeyNotFound(id));
+        }
 
+        // Delete entry
+        let _ = self.storage.remove(&id).unwrap();
+        Ok(())
     }
 
-    pub fn commit(&self) -> Result<(), StoreError> {
+    pub fn commit(&mut self) -> Result<(), StoreError> {
 
         // Create a string from KeyValue container
-        let json_data = self.convert_to_string();
+        let json_data = match self.convert_to_string() {
+            Err(e) => {
+                let error = String::from(e.description());
+                return Err(StoreError::SerializeError(error));
+            }
+            Ok(data) => data,
+        };
+
+        let path = self.path.clone().unwrap();
 
         // File creation
-        let target_file = OpenOptions::new()
+        let mut target_file = OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(false)
-            .open(&self.path.unwrap()).unwrap();
+            .open(&path).unwrap();
 
         // Ensure mutex lock for one thread write only
-        target_file.lock_exclusive();
+        let _ = target_file.lock_exclusive();
 
         match Write::write_all(&mut target_file, json_data.as_bytes()){
-            Err(e) => Err(StoreError::CommitError),
-            Ok(_) => target_file.unlock(),
+            Err(e) => {
+                let error = String::from(e.description());
+                return Err(StoreError::CommitError(error));
+            },
+            Ok(_) => { target_file.unlock(); },
         }
 
         Ok(())
     }
 
+    /*
     pub fn destruct(self) -> Result<(), StoreError> {
         // Find file path
         // Delete file
     }
+    */
 }
