@@ -1,12 +1,27 @@
 # tinystore
-an experimental, lightweight, JSON-powered key-value store for Rust
 
-## Features
+experimental key-value store in Rust
 
-* Mutex-locking for threading
-* SHA256 hashing (for sensitive information)
-* Easiness of use (less than 300 LOC)!
+## intro
 
-## TODO
+__tinystore__ is an experimental key-value store implementation in Rust that harnesses native capabilities like locking and hashing while relying on the JSON serialization format for persistence.
 
-* Deserialize pre-existing JSON structures into tinystore
+## features
+
+* easy to use and interface
+* mutex locking during DB interactions
+* SHA-256 hashing
+* (TODO) re-do log
+* (TODO) serialize ADSs
+
+## build
+
+TODO: re-implement tests, improve docs, and add `examples/`
+
+```
+$ cargo test
+```
+
+## license
+
+[mit](https://codemuch.tech/license.txt)
