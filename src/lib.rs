@@ -1,10 +1,14 @@
 extern crate crypto;
 extern crate base64;
 extern crate serde;
-
-#[macro_use]
-extern crate serde_json;
 extern crate fs2;
+
+#[macro_use] extern crate serde_json;
+
+use std::path::PathBuf;
+use std::fs::OpenOptions;
+use std::error::Error;
+use std::io::Write;
 
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
@@ -13,80 +17,42 @@ use serde_json::{Map, Value};
 
 use fs2::FileExt;
 
-use std::path::PathBuf;
-use std::fs::OpenOptions;
-use std::error::Error;
-use std::io::Write;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_get() {
-
-        // Create a new TinyStore object, with default values
-        let mut t = TinyStore::quick_new();
-
-        // Add keys and values
-        t.write(String::from("key1"), json!("a value"));
-        t.write(String::from("key2"), json!("another value"));
-        t.write(String::from("key3"), json!("a third value"));
-
-        // Test retrieval of item
-        match t.get(String::from("key1")){
-            Ok(v) => println!("{:?}", v),
-            Err(e) => panic!("{:?}", e),
-        }
-
-        // Write changes
-        let _ = t.commit();
-    }
-
-    #[test]
-    fn test_encrypted_get() {
-        let mut t = TinyStore::new(None, true);
-        t.write(String::from("key1"), json!("a value"));
-
-        match t.get(String::from("key1")){
-            Ok(v) => println!("{:?}", v),
-            Err(e) => panic!("{:?}", e),
-        }
-    }
-}
-
-// Rather than using a HashMap, a Map is much more optimized for JSON interactions
-type KeyValue = Map<String, Value>;
-
-
+/// represents various errors encountered
+/// during key-value DB interactions.
 #[derive(Debug)]
-pub enum StoreError {
+pub enum TinyStoreError {
     KeyNotFound(String),
     SerializeError(String),
     CommitError(String),
     NoPathSupplied,
     IsEmpty,
     NotFound,
-    KeyValueImbalance,
+    TinyCollectionImbalance,
 }
 
 
+/// represents a key-value type based on serde's Map,
+/// rather than the traditional HashMap<K,V>. This makes
+/// de/serialization easier while maintaining the same
+/// functionality.
+type TinyCollection = Map<String, Value>;
+
+
+/// main interaction object for kv store
 pub struct TinyStore {
-    path: Option<PathBuf>,          // this is the path where the database file will be written to, if the user chooses to commit
-    hash: bool,                     // implement a hash algorithm for values that store sensitive data, if the user chooses to
-    storage: KeyValue,              // represents where we will be
+    path: Option<PathBuf>,
+    hash: bool,
+    storage: TinyCollection,
 }
 
-
+/// implement Default trait to automatically create TinyStore
 impl Default for TinyStore {
-
-    // Set default values for TinyStore struct, if user chooses not to specify custom parameters
     fn default() -> TinyStore {
-
         TinyStore {
             path: Some(PathBuf::from("database.json")),
             hash: false,
-            storage: KeyValue::new(),
+            storage: TinyCollection::new(),
         }
     }
 }
@@ -94,50 +60,37 @@ impl Default for TinyStore {
 
 impl TinyStore {
 
-    // Convert to JSON, then to String
+    /// helper that converts to JSON and then to string
     fn convert_to_string(&mut self) -> Result<String, serde_json::Error> {
         let storage = self.storage.clone();
         serde_json::to_string(&storage).map_err(|err| err)
     }
 
 
-    // Creates a new TinyStore object without any configuration.
-    // This is optimal for the user that wishes to hash preemptively before interacting with container
-    pub fn quick_new() -> TinyStore {
-
-        // Creates a new database utilizing default struct values
-        TinyStore::default()
-    }
-
-
-    // Creates a new TinyStore object with configuration supplied by parameters
+    /// `new` initializes a new TinyStore object with configuration
+    /// supplied by various parameters
     pub fn new(path: Option<String>, hash_algo: bool) -> TinyStore {
 
         // Check if path was supplied
         if let None = path {
-
-            // Create new TinyStore with no path
             TinyStore {
                 path: None,
                 hash: hash_algo,
-                storage: KeyValue::new(),
+                storage: TinyCollection::new(),
             }
         } else {
-
-            // Create new TinyStore with path
             TinyStore {
                 path: Some(PathBuf::from(path.unwrap())),
                 hash: hash_algo,
-                storage: KeyValue::new(),
+                storage: TinyCollection::new(),
             }
         }
     }
 
 
-    // Writes to TinyStore key-value container, without commiting to file
+    /// writes to key-value container, but does not commit to DB
     pub fn write(&mut self, key: String, value: Value) -> () {
-
-        if let true = self.hash {
+        if self.hash {
             let mut hash = Sha256::new();
             hash.input(key.as_bytes());
             let _ = self.storage.insert(key, json!(hash.result_str()));
@@ -147,79 +100,51 @@ impl TinyStore {
     }
 
 
-    // Retrieves a value from TinyStore with key
-    pub fn get(&mut self, id: String) -> Result<Value, StoreError> {
-
-        // Check to see if container contains the key
+    /// retrieves a value using a key `id`.
+    pub fn get(&mut self, id: String) -> Result<Value, TinyStoreError> {
         if self.storage.contains_key(&id) == false {
-            return Err(StoreError::KeyNotFound(id));
+            return Err(TinyStoreError::KeyNotFound(id));
         }
 
         // Retrieve mutable value from key
-        let val = self.storage.get_mut(&id)
-                              .unwrap();
-
-        // Return clone of value, to prevent moving
+        let val = self.storage.get_mut(&id).unwrap();
         Ok(val.clone().take())
     }
 
 
-    pub fn get_all(&mut self) -> Result<KeyValue, StoreError> {
-
-        // Check if container is empty
-        if self.storage.is_empty() == true {
-            return Err(StoreError::IsEmpty);
-        }
-
-        // Check if container has imbalance in keys and values
-        if (self.storage.keys().len() != self.storage.len()) && (self.storage.values().len() != self.storage.len()) {
-            return Err(StoreError::KeyValueImbalance)
-        }
-
-        Ok(self.storage.clone())
-    }
-
-
-    // Deletes an entry in key-value store by ID
-    pub fn delete(&mut self, id: String) -> Result<(), StoreError> {
-
-        // Check to see if container contains the key
+    /// deletes an entry in key-value store by ID
+    pub fn delete(&mut self, id: String) -> Result<(), TinyStoreError> {
         if self.storage.contains_key(&id) == false {
-            return Err(StoreError::KeyNotFound(id));
+            return Err(TinyStoreError::KeyNotFound(id));
         }
-
-        // Delete entry in container by ID
         let _ = self.storage.remove(&id).unwrap();
         Ok(())
     }
 
 
-    // Delete the storage structure
+    /// deletes the TinyCollection struct
     pub fn destruct(&mut self) -> () {
         self.storage.clear();
     }
 
 
-    // Commit the storage structure, creating a JSON file
-    pub fn commit(&mut self) -> Result<(), StoreError> {
-
-        // Check if container has path
+    /// commit the storage structure, creating a JSON file
+    pub fn commit(&mut self) -> Result<(), TinyStoreError> {
         if self.path == None {
-            return Err(StoreError::NoPathSupplied);
+            return Err(TinyStoreError::NoPathSupplied);
         }
 
-        // Create a string from KeyValue container
+        // create a string from TinyCollection container
         let json_data = match self.convert_to_string() {
             Err(e) => {
                 let error = String::from(e.description());
-                return Err(StoreError::SerializeError(error));
+                return Err(TinyStoreError::SerializeError(error));
             }
             Ok(data) => data,
         };
 
+        // file creation
         let path = self.path.clone().unwrap();
-
-        // File creation
         let mut target_file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -232,14 +157,13 @@ impl TinyStore {
         match Write::write_all(&mut target_file, json_data.as_bytes()){
             Err(e) => {
                 let error = String::from(e.description());
-                return Err(StoreError::CommitError(error));
+                return Err(TinyStoreError::CommitError(error));
             },
             Ok(_) => { let _ = target_file.unlock(); },
         }
 
         // Unlock file from mutex
         let _ = target_file.unlock();
-
         Ok(())
     }
 }
