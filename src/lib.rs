@@ -1,3 +1,8 @@
+//!
+//! lib.rs
+//!
+//!     main library interface to TinyCollection
+//!
 extern crate crypto;
 extern crate base64;
 extern crate serde;
@@ -5,10 +10,10 @@ extern crate fs2;
 
 #[macro_use] extern crate serde_json;
 
-use std::path::PathBuf;
-use std::fs::OpenOptions;
-use std::error::Error;
 use std::io::Write;
+use std::error::Error;
+use std::fs::OpenOptions;
+use std::path::PathBuf;
 
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
@@ -39,7 +44,7 @@ pub enum TinyStoreError {
 type TinyCollection = Map<String, Value>;
 
 
-/// main interaction object for kv store
+/// main interaction object for in-memory key value store
 pub struct TinyStore {
     path: Option<PathBuf>,
     hash: bool,
@@ -69,21 +74,11 @@ impl TinyStore {
 
     /// `new` initializes a new TinyStore object with configuration
     /// supplied by various parameters
-    pub fn new(path: Option<String>, hash_algo: bool) -> TinyStore {
-
-        // Check if path was supplied
-        if let None = path {
-            TinyStore {
-                path: None,
-                hash: hash_algo,
-                storage: TinyCollection::new(),
-            }
-        } else {
-            TinyStore {
-                path: Some(PathBuf::from(path.unwrap())),
-                hash: hash_algo,
-                storage: TinyCollection::new(),
-            }
+    pub fn new(path: Option<PathBuf>, hash_algo: bool) -> TinyStore {
+        TinyStore {
+            path: path,
+            hash: hash_algo,
+            storage: TinyCollection::new(),
         }
     }
 
