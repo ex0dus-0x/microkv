@@ -22,7 +22,7 @@ Here are some use-cases that you may want to use __micro-kv__ for:
 
 * __Secure__ - TODO
 
-* __Small__ - a small and auditable codebase means a faster runtime with a reduced atteck surface
+* __Small__ - a small and auditable codebase means a faster runtime with a reduced attack surface
 
 
 ## design

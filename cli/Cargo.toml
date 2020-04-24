@@ -1,0 +1,18 @@
+[package]
+name = "microkv-cli"
+version = "0.1.0"
+authors = ["ex0dus-0x <ex0dus@codemuch.tech>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+actix_web = "2"
+actix_rt = "1"
+
+microkv = { path = ".." }
+
+
+[[bin]]
+name = "microkv"
+path = "src/main.rs"
