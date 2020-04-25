@@ -10,6 +10,5 @@ extern crate microkv;
 
 
 fn main() {
-    let matches = AppCommand::new()
-        .get_matches()
+    unimplemented!();
 }

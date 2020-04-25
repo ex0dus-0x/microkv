@@ -9,36 +9,30 @@ use std::error::Error;
 
 
 // aliases a custom Result type to return our specific error type.
-pub type Result<T> = std::result::Result<T, ErrorType>;
+pub type Result<'a, T> = std::result::Result<T, KVError<'a>>;
 
 
-/// `ErrorType` defines the implementation-level errors that
+/// `ErrorType` defines the general impl<'a>ementation-level errors that
 /// may be reached during runtime execution.
 #[derive(Debug)]
 pub enum ErrorType {
-    KeyNotFound,
-    SerializeError,
-    DeserializeError,
-    FileError,
-    CommitError,
-    NoPathSupplied,
-    IsEmpty,
-    NotFound,
-    TinyCollectionImbalance,
+    KeyError,       // issues involving specified key
+    FileError,      // unified type for io::Error
+    PoisonError     // locking error, indicating poisoned mutex
 }
 
 
-/// `KVError` encapsulates an ErrorType, and is what ultimately
+/// `KVError<'a>` encapsulates an ErrorType, and is what ultimately
 /// gets returned to any user-facing code when and exception is handled.
-pub struct KVError {
+pub struct KVError<'a> {
     error: ErrorType,
-    message: Option<String>
+    msg: Option<&'a str>
 }
 
 
-impl fmt::Debug for KVError {
+impl<'a> fmt::Debug for KVError<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(msg) = &self.message {
+        if let Some(msg) = &self.msg {
             write!(f, "KVError::{:?}: {}", self.error, msg)
         } else {
             write!(f, "KVError::{:?}", self.error)
@@ -47,7 +41,7 @@ impl fmt::Debug for KVError {
 }
 
 
-impl fmt::Display for KVError {
+impl<'a> fmt::Display for KVError<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} received from microKV: {}", "test", "test")
     }
@@ -55,15 +49,15 @@ impl fmt::Display for KVError {
 
 
 // Enables us to unify any I/O errors with our error type.
-impl From<io::Error> for KVError {
+impl<'a> From<io::Error> for KVError<'a> {
     fn from(error: io::Error) -> Self {
         KVError {
             error: ErrorType::FileError,
-            message: Some(error.to_string()),
+            msg: Some(&error.to_string()),
         }
     }
 }
 
 
-// TODO: implement source()
-impl Error for KVError {}
+// TODO: impl<'a>ement source()
+impl<'a> Error for KVError<'a> {}

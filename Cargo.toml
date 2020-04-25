@@ -6,3 +6,5 @@ authors = ["ex0dus-0x <ex0dus at codemuch.tech>"]
 [dependencies]
 
 secrets = "1.0.0"
+bincode = "1.2.1"
+serde = "1.0.106"
