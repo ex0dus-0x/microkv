@@ -4,15 +4,16 @@
 //!     that can be exported for interfacing.
 
 extern crate bincode;
+extern crate secstr;
 extern crate serde;
-extern crate secrets;
+extern crate sodiumoxide;
 
-pub mod kv;
 pub mod errors;
-
-use crate::kv::MicroKV;
+pub mod kv;
 
 /*
+use crate::kv::MicroKV;
+
 /// `Mode` defines the state that the `App` should run as.
 /// TODO
 enum Mode {
