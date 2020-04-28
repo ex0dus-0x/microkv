@@ -12,7 +12,7 @@ use std::sync::Mutex;
 use crate::errors::{ErrorType, KVError, Result};
 
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 
 use secstr::{SecStr, SecVec};
 
@@ -32,12 +32,21 @@ type KV = BTreeMap<String, SecVec<u8>>;
 /// `MicroKV` defines the main interface structure
 /// in order to represent the most recent state of the data
 /// store.
+#[derive(Serialize, Deserialize)]
 pub struct MicroKV {
     path: PathBuf,
+
+    // stores the actual key-value store encapsulated with a Mutex
     storage: Mutex<KV>,
+
+    // pseudorandom nonce that can be publicly known
+    nonce: Nonce,
+
+    // memory-guarded hashed password
+    #[serde(skip_serializing, skip_deserializing)]
     pwd: Option<SecStr>,
-    nonce: Nonce
 }
+
 
 impl MicroKV {
     /// `new()` initializes a new empty and unencrypted MicroKV store with
@@ -52,7 +61,7 @@ impl MicroKV {
         // initialize a new public nonce for symmetric AEAD
         let nonce: Nonce = secretbox::gen_nonce();
 
-        // get abspath to dbname to write to
+        // get abspath to dbname to write to.
         let path = MicroKV::get_db_path(dbname);
 
         Self {
@@ -63,12 +72,17 @@ impl MicroKV {
         }
     }
 
-    /// `open()` opens a previously instantiated and encrypted MicroKV. The
-    pub fn open(dbname: String) -> io::Result<MicroKV> {
+    /// `open()` opens a previously instantiated and encrypted MicroKV given a db name.
+    /// The public nonce generated from a previous session is also retrieved in order to
+    /// do authenticated encryption later on.
+    pub fn open(dbname: String) -> io::Result<Self> {
+        let path = MicroKV::get_db_path(dbname);
         unimplemented!();
     }
 
-    // TODO: check if file exists or not
+
+    /// `get_db_path()` is an inlined helper that forms an absolute path from a given database
+    /// name and the default workspace path.
     #[inline]
     fn get_db_path(name: String) -> PathBuf {
         let mut path = PathBuf::from(DEFAULT_WORKSPACE_PATH);
@@ -94,7 +108,9 @@ impl MicroKV {
     /// should guarentee security when implementing such methods, as MicroKV only guarentees secure
     /// storage).
     pub fn with_pwd_clear(mut self, unsafe_pwd: String) -> Self {
-        let pwd: SecStr = SecVec::new(sha256::hash(unsafe_pwd.as_bytes()).0.to_vec());
+        let pwd: SecStr = SecVec::new(
+            sha256::hash(unsafe_pwd.as_bytes()).0.to_vec()
+        );
         self.pwd = Some(pwd);
         self
     }
@@ -105,18 +121,12 @@ impl MicroKV {
     /// Ideally, this should be used if the password to encrypt is generated as a pseudorandom
     /// value, or previously hashed by another preferred one-way function within or outside the
     /// application.
-    pub fn with_pwd_hash(mut self, pwd: &[u8]) -> Self {
-        if pwd.len() != 32 {
-            panic!("not of length 32");
-        }
-        self.pwd = Some(SecVec::new(pwd.to_vec()));
+    pub fn with_pwd_hash(mut self, _pwd: [u8; 32]) -> Self {
+        let pwd: SecStr = SecVec::new(_pwd.to_vec());
+        self.pwd = Some(pwd);
         self
     }
 
-    /// `build()` creates the final object for interaction
-    pub fn build(&self) -> MicroKV {
-        unimplemented!();
-    }
 
     ///////////////////////////////////////
     // Primitive key-value store operations
@@ -203,6 +213,8 @@ impl MicroKV {
             let _ = data.remove(&key).unwrap();
         }
 
+        // TODO: encrypt value if password if available
+
         // initialize secure serialized object and insert to BTreeMap
         let value: SecVec<u8> = SecVec::new(bincode::serialize(&_value).unwrap());
         data.insert(key, value);
@@ -246,13 +258,12 @@ impl MicroKV {
     /// `commit()` writes the BTreeMap to a deserializable bincode file for persistent storage.
     /// A secure crypto construction is used in order to encrypt information to the store, and
     pub fn commit(&self) -> io::Result<()> {
-        /*
+
         // initialize workspace directory if not exists
-        let workspace_dir: Path = Path::new(DEFAULT_WORKSPACE_PATH);
+        let workspace_dir: &Path = Path::new(DEFAULT_WORKSPACE_PATH);
         if !workspace_dir.is_dir() {
             fs::create_dir(DEFAULT_WORKSPACE_PATH)?;
         }
-        */
         Ok(())
     }
 }
@@ -261,7 +272,7 @@ impl Drop for MicroKV {
     fn drop(&mut self) -> () {
         match self.pwd {
             Some(ref mut pwd) => {
-                pwd.zero_out();
+                pwd.zero_out()
             }
             None => {}
         }

@@ -6,5 +6,6 @@ authors = ["ex0dus-0x <ex0dus at codemuch.tech>"]
 [dependencies]
 secstr = "0.4.0"
 bincode = "1.2.1"
-serde = "1.0.106"
 sodiumoxide = "0.2.5"
+
+serde = { version = "1.0.106", features = ["serde_derive"] }

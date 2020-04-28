@@ -23,8 +23,8 @@ pub enum ErrorType {
 /// `KVError<'a>` encapsulates an ErrorType, and is what ultimately
 /// gets returned to any user-facing code when and exception is handled.
 pub struct KVError<'a> {
-    error: ErrorType,
-    msg: Option<&'a str>,
+    pub error: ErrorType,
+    pub msg: Option<&'a str>,
 }
 
 impl<'a> fmt::Debug for KVError<'a> {
@@ -43,15 +43,17 @@ impl<'a> fmt::Display for KVError<'a> {
     }
 }
 
+/*
 // Enables us to unify any I/O errors with our error type.
 impl<'a> From<io::Error> for KVError<'a> {
     fn from(error: io::Error) -> Self {
         KVError {
             error: ErrorType::FileError,
-            msg: Some(error.to_string().as_str()),
+            msg: Some(&error.to_string()),
         }
     }
 }
+*/
 
 // TODO: impl<'a>ement source()
 impl<'a> Error for KVError<'a> {}
