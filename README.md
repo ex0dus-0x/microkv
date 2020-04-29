@@ -31,12 +31,11 @@ When reading and persisting to disk, the key-value store Uses `bincode` for fast
 
 __microkv__ acts almost in the sense of a secure enclave with any stored information. First, inserted values are immediately encryped using authenticated encryption with XSalsa20 (stream cipher) and Poly1305 (HMAC) from `sodiumoxide`, guarenteeing security and integrity. Encryped values in-memory are also memory-locked with `mlock`, and securely zeroed when destroyed to avoid persistence in memory pages.
 
-__microkv__ also provides locking support with `RwLock`s, which utilize mutual exclusion like mutexes, but robust in the sense that concurrent read locks can be held, but only one writer lock can be held at a time. This helps remove thread-safey and data race concerns, but also enables
-
+__microkv__ also provides locking support with `RwLock`s, which utilize mutual exclusion like mutexes, but robust in the sense that concurrent read locks can be held, but only one writer lock can be held at a time. This helps remove thread-safey and data race concerns, but also enables multiple read accesses safely.
 
 * __Small__
 
-At its core, __microkv__ is implemented in ~500 LOCs, making the implementation portable and auditable.
+At its core, __microkv__ is implemented in ~500 LOCs, making the implementation portable and auditable. It does not offer extensions to other serializable formats, or any other user-involved configurability, meaning it will work right out of the box.
 
 ## design
 
@@ -49,19 +48,68 @@ To see details about how microkv is internally implemented check out the `docs/`
 
 ## usage
 
-You can use microkv as both a library crate or an executable that serves a local server instance.
+You can use microkv as both a library crate for your implementation, or a standalone CLI.
 
 To install locally, simply clone the repository and install with `cargo`:
 
 ```
+# .. from crates.io
+$ cargo install microkv
+
+# .. or locally
 $ cargo install --path .
 ```
 
-Run `cargo test` to validate that the test suite works (TODO):
+Run `cargo test` to validate that the test suite works:
 
 ```
 $ cargo test
 ```
+
+### library
+
+Here's example usage of the `microkv` library crate:
+
+```rust
+extern crate microkv;
+
+use microkv::MicroKV;
+
+#[derive(Serialize, Deserialize, Debug)]
+struct Identity {
+    uuid: u32,
+    name: String,
+    sensitive_data: String,
+}
+
+
+fn main() -> {
+    let unsafe_pwd: String = "my_password_123";
+
+    // initialize database with (unsafe) cleartext password
+    let db: MicroKV = MicroKV::new("my_db")
+        .with_password_clear(unsafe_pwd);
+
+    // simple interaction
+    db.put("simple", 1);
+    print("{}", db.get::<i32>("simple").unwrap());
+    db.delete("simple");
+
+    // more complex interaction
+    let identity = Identity {
+        uuid: 123,
+        name: String::from("Alice"),
+        sensitive_data: String::from("something_important_here")
+    };
+    db.put("complex", identity);
+    print("{:?}", db.get::<Identity>("complex").unwrap());
+    db.delete("complex");
+}
+```
+
+### cli
+
+(TODO)
 
 ## inspirations
 
