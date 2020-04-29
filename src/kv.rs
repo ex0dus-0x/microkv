@@ -3,13 +3,15 @@
 //!     Defines the foundational structure and API that will enforce
 //!     how the key-value store will be implemented.
 
-use std::collections::BTreeMap;
-use std::fs;
-use std::io;
+use std::env;
+use std::fs::{self, File};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use crate::errors::{ErrorType, KVError, Result};
+
+use indexmap::IndexMap;
 
 use serde::de::DeserializeOwned;
 use serde::{Serialize, Deserialize};
@@ -22,12 +24,12 @@ use sodiumoxide::crypto::secretbox::{self, Key, Nonce};
 
 /// Defines the directory path where a key-value store
 /// (or multiple) can be interacted with.
-const DEFAULT_WORKSPACE_PATH: &str = "$HOME/.microkv/";
+const DEFAULT_WORKSPACE_PATH: &str = ".microkv/";
 
 /// `KV` represents an alias to a base data structure that
 /// supports storing associated types. A B-tree is a strong
 /// choice due to asymptotic performance during interaction.
-type KV = BTreeMap<String, SecVec<u8>>;
+type KV = IndexMap<String, SecVec<u8>>;
 
 /// `MicroKV` defines the main interface structure
 /// in order to represent the most recent state of the data
@@ -76,8 +78,25 @@ impl MicroKV {
     /// The public nonce generated from a previous session is also retrieved in order to
     /// do authenticated encryption later on.
     pub fn open(dbname: String) -> io::Result<Self> {
+
+        // initialize abspath to persistent db
         let path = MicroKV::get_db_path(dbname);
-        unimplemented!();
+
+        // read raw serialized structure to kv_raw
+        let mut kv_raw: Vec<u8> = Vec::new();
+        File::open(path)?.read_to_end(&mut kv_raw)?;
+
+        // deserialize with bincode and return
+        let kv: Self = bincode::deserialize(&kv_raw).unwrap();
+        Ok(kv)
+    }
+
+
+    /// `get_home_dir()` is an inlined helper that retrieves the home directory by resolving
+    /// $HOME, since `std::env::home_dir()` is depreciated.
+    #[inline]
+    fn get_home_dir() -> PathBuf {
+        PathBuf::from(env::var("HOME").unwrap())
     }
 
 
@@ -85,7 +104,8 @@ impl MicroKV {
     /// name and the default workspace path.
     #[inline]
     fn get_db_path(name: String) -> PathBuf {
-        let mut path = PathBuf::from(DEFAULT_WORKSPACE_PATH);
+        let mut path = PathBuf::from(MicroKV::get_home_dir());
+        path.push(DEFAULT_WORKSPACE_PATH);
         path.push(name);
         path.set_extension("kv");
         path
@@ -137,7 +157,7 @@ impl MicroKV {
         V: DeserializeOwned,
     {
         let key = String::from(_key);
-        let lock = self.storage.lock().map_err(|e| KVError {
+        let lock = self.storage.lock().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
         })?;
@@ -147,7 +167,7 @@ impl MicroKV {
 
         // retrieve value from BTreeMap if stored, decrypt and return
         match data.get(&key) {
-            Some(mut val) => {
+            Some(val) => {
 
                 // get value to deserialize. If password is set, retrieve the value, and decrypt it
                 // using AEAD. Otherwise just get the value and return
@@ -176,11 +196,13 @@ impl MicroKV {
                             }
                         }
                    },
+
+                   // if no password, return value as-is
                    None => val.unsecure().to_vec()
                 };
 
                 // finally deserialize into deserializable object to return as
-                let value: V = bincode::deserialize(&deser_val).map_err(|e| {
+                let value: V = bincode::deserialize(&deser_val).map_err(|_| {
                     KVError {
                         error: ErrorType::KVError,
                         msg: Some("cannot deserialize into specified object type")
@@ -213,10 +235,21 @@ impl MicroKV {
             let _ = data.remove(&key).unwrap();
         }
 
-        // TODO: encrypt value if password if available
+        // serialize the object for committing to db
+        let ser_val: Vec<u8> = bincode::serialize(&_value).unwrap();
 
-        // initialize secure serialized object and insert to BTreeMap
-        let value: SecVec<u8> = SecVec::new(bincode::serialize(&_value).unwrap());
+        // encrypt and secure value if password is available
+        let value: SecVec<u8> = match &self.pwd {
+
+            // encrypt using AEAD and secure memory
+            Some(pwd) => {
+                let key: Key = Key::from_slice(&pwd.unsecure()).unwrap();
+                SecVec::new(secretbox::seal(&ser_val, &self.nonce, &key))
+            },
+
+            // otherwise initialize secure serialized object to insert to BTreeMap
+            None => SecVec::new(ser_val)
+        };
         data.insert(key, value);
         Ok(())
     }
@@ -255,8 +288,9 @@ impl MicroKV {
     // I/O Operations
     ///////////////////
 
-    /// `commit()` writes the BTreeMap to a deserializable bincode file for persistent storage.
-    /// A secure crypto construction is used in order to encrypt information to the store, and
+    /// `commit()` writes the BTreeMap to a deserializable bincode file for fast persistent storage.
+    /// A secure crypto construction is used in order to encrypt information to the store, such
+    /// that it can't be read out.
     pub fn commit(&self) -> io::Result<()> {
 
         // initialize workspace directory if not exists

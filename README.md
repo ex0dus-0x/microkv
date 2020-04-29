@@ -1,5 +1,7 @@
 # micro-kv
 
+> NOTE: Functionally complete, but still WIP!
+
 a minimal and persistent key-value store designed with security in mind.
 
 ## intro
@@ -22,16 +24,17 @@ Here are some use-cases that you may want to use __micro-kv__ for:
 
 * __Performant__
 
-Uses `bincode` for fast de/serialization of the underlying structure for efficiency when reading and writing
-from disk to memory.
+__micro-kv__'s underlying map structure is based off of @bluss's [indexmap](https://github.com/bluss/indexmap) implementation, which offers performance on par with built-in `HashMap`'s amortized constant runtime, but can also provided sorted key iteration, similar to the less-performant `BTreeMap`. This provides a strong balance between performance and functionality.
+
+When reading and persisting to disk, the key-value store Uses `bincode` for fast de/serialization of the underlying structures, allowing users to insert any serializable structure without worring about incured overhead for persisting.
 
 * __Secure__
 
-Stores entries in-memory with secure memory locking, and encrypts when written to disk for persistence.
+`microkv` acts almost in the sense of a secure enclave with any stored information. First, inserted values are immediately encryped using authenticated encryption with XSalsa20 (stream cipher) and Poly1305 (HMAC) from `sodiumoxide`, guarenteeing security and integrity. Encryped values in-memory are also memory-locked with `mlock`, and securely zeroed when destroyed to avoid persistence in memory pages.
 
 * __Small__
 
-Implemented in a small and auditable codebasem whiche means a faster runtime with a reduced attack surface
+`microkv` is
 
 
 ## design
@@ -41,21 +44,32 @@ To see details about how micro-kv is internally implemented check out the `docs/
 * Threat Model
 * Internal Design
 
+(TODO)
+
 ## usage
 
 You can use micro-kv as both a library crate or an executable that serves a local server instance.
 
-To install, simply clone the repository and install with `cargo`:
+To install locally, simply clone the repository and install with `cargo`:
 
 ```
 $ cargo install --path .
 ```
 
-Run `cargo test` to validate that the test suite works:
+Run `cargo test` to validate that the test suite works (TODO):
 
 ```
 $ cargo test
 ```
+
+## TODO
+
+* tests!
+* use a `Rwlock` instead of `Mutex` for robust read-write locking routines (ie. `kv.lock_read(callback: Fn())`)
+* build client and server cli
+* other helper database operations (iterators, cleanup)
+* finalize unified error handling types and routines
+* threat model and design docs
 
 ## license
 

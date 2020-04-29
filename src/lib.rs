@@ -7,6 +7,7 @@ extern crate bincode;
 extern crate secstr;
 extern crate serde;
 extern crate sodiumoxide;
+extern crate indexmap;
 
 pub mod errors;
 pub mod kv;
