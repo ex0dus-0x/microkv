@@ -34,8 +34,7 @@ When reading and persisting to disk, the key-value store Uses `bincode` for fast
 
 * __Small__
 
-`microkv` is
-
+At its core, __micro-kv__ is implemented in ~500 LOCs, making the implementation portable and auditable.
 
 ## design
 
