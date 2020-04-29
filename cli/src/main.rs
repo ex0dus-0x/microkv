@@ -5,10 +5,20 @@
 //!     as a client that interacts with a local persistent store or
 //!     one on another host and volume.
 
-extern crate clap;
 extern crate microkv;
 
+use microkv::MicroKV;
 
-fn main() {
-    unimplemented!();
+fn main() -> std::io::Result<()> {
+
+    let unsafe_pwd: String = String::from("password123");
+
+    let db = MicroKV::new("default")
+        .with_pwd_clear(unsafe_pwd);
+
+    db.put("test", 1).unwrap();
+    db.put("test", 1).unwrap();
+    println!("{}", db.get::<i32>("test").unwrap());
+    db.commit()?;
+    Ok(())
 }
