@@ -154,10 +154,10 @@ impl MicroKV {
             msg: None,
         })?;
 
-        // check if key exists in store
+        // initialize a copy of state
         let data = lock.clone();
 
-        // retrieve value from BTreeMap if stored, decrypt and return
+        // retrieve value from IndexMap if stored, decrypt and return
         match data.get(&key) {
             Some(val) => {
                 // get value to deserialize. If password is set, retrieve the value, and decrypt it
@@ -218,7 +218,7 @@ impl MicroKV {
             msg: None,
         })?;
 
-        // check if key exists in store, and remove the entry
+        // to retain best-case constant runtime, we remove the key-value if found
         if data.contains_key(&key) {
             let _ = data.remove(&key).unwrap();
         }
@@ -259,6 +259,38 @@ impl MicroKV {
     // Other key-value store helper operations
     //////////////////////////////////////////
 
+
+    /// `lock_read()` is an arbitrary read-lock that encapsulates a read-only closure.
+    /// This means that multiple concurrent readers can hold a lock and parse out data.
+    pub fn lock_read<C, R>(&self, callback: C) -> Result<R>
+    where
+        C: Fn(&KV) -> R
+    {
+        let data = self.storage.read().map_err(|_| KVError {
+            error: ErrorType::PoisonError,
+            msg: None
+        })?;
+        Ok(callback(&data))
+    }
+
+
+    /// `lock_write()` is an arbitrary write-lock that encapsulates a write-only closure.
+    /// This means that only one single writer can hold a lock and mutate data, blocking any
+    /// other readers/writers before the lock is released.
+    pub fn lock_write<C, R>(&self, mut callback: C) -> Result<R>
+    where
+        C: FnMut(&KV) -> R
+    {
+        let mut data = self.storage.write().map_err(|_| KVError {
+            error: ErrorType::PoisonError,
+            msg: None
+        })?;
+        Ok(callback(&mut data))
+    }
+
+
+    /// `exists()` is a helper routine that acquires a reader lock and checks if a key exists
+    /// within the IndexMap structure.
     pub fn exists<K>(&self, _key: &str) -> Result<bool> {
         let key = String::from(_key);
         let data = self.storage.read().map_err(|_| KVError {
@@ -268,19 +300,48 @@ impl MicroKV {
         Ok(data.contains_key(&key))
     }
 
-    /*
-    pub fn keys(&self) -> Result<Vec<String>> {
-        let data = self.storage.lock().map_err(|_| KVError {})?;
-    }
-    */
 
-    // TODO: clear all
+    /// `keys()` safely consumes an iterator over the keys in
+    /// the IndexMap and returns a Vec for further use.
+    ///
+    /// Note that key iteration, not value iteration, is only
+    /// supported in order to preserve security guarentees.
+    pub fn keys(&self) -> Result<Vec<&str>> {
+        let lock = self.storage.read().map_err(|_| KVError {
+            error: ErrorType::PoisonError,
+            msg: None
+        })?;
+        let data = lock.clone();
+        Ok(data.keys()
+               .map(|x| x.as_str())
+               .collect::<Vec<&str>>())
+    }
+
+
+    pub fn sorted_keys(&self) -> Result<Vec<&str>> {
+        unimplemented!()
+    }
+
+
+    pub iter_keys(&self) -> Result<()> {
+        unimplemented!()
+    }
+
+
+    pub iter_sorted_keys(&self) -> Result<()> {
+        unimplemented!()
+    }
+
+
+    pub fn destroy(&self) -> Result<()> {
+        unimplemented!()
+    }
 
     ///////////////////
     // I/O Operations
     ///////////////////
 
-    /// `commit()` writes the BTreeMap to a deserializable bincode file for fast persistent storage.
+    /// `commit()` writes the IndexMap to a deserializable bincode file for fast persistent storage.
     /// A secure crypto construction is used in order to encrypt information to the store, such
     /// that it can't be read out.
     pub fn commit(&self) -> io::Result<()> {
