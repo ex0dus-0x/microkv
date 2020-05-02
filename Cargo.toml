@@ -3,9 +3,7 @@ name = "microkv"
 version = "0.1.0"
 authors = ["ex0dus-0x <ex0dus at codemuch.tech>"]
 
-[[bin]]
-name = "microkv"
-path = "cli/src/main.rs"
+edition = "2018"
 
 [dependencies]
 
