@@ -10,10 +10,9 @@ extern crate microkv;
 extern crate serde;
 
 use microkv::MicroKV;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 static TEST_PASSWORD: &str = "TEST_PASSWORD";
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TestStruct {
@@ -21,11 +20,9 @@ struct TestStruct {
     pub name: String,
 }
 
-
 #[test]
 fn test_simple() {
-    let kv: MicroKV = MicroKV::new("test_simple")
-        .with_pwd_clear(TEST_PASSWORD.to_string());
+    let kv: MicroKV = MicroKV::new("test_simple").with_pwd_clear(TEST_PASSWORD.to_string());
 
     let key: &str = "some_key";
     let value: u64 = 12345;
@@ -35,16 +32,14 @@ fn test_simple() {
     assert_eq!(value, res);
 }
 
-
 #[test]
 fn test_complex() {
-    let kv: MicroKV = MicroKV::new("test_complex")
-        .with_pwd_clear(TEST_PASSWORD.to_string());
+    let kv: MicroKV = MicroKV::new("test_complex").with_pwd_clear(TEST_PASSWORD.to_string());
 
     let key: &str = "some_key";
     let value = TestStruct {
         id: 13,
-        name: String::from("Bob")
+        name: String::from("Bob"),
     };
     kv.put(key, value);
 
