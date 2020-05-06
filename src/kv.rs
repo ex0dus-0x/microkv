@@ -144,6 +144,10 @@ impl MicroKV {
     // Primitive key-value store operations
     ///////////////////////////////////////
 
+    /// `get()` retrieves a deserializable value based on
+    /// a given input key. Can return errors if lock is poisoned,
+    /// ciphertext decryption doesn't work, and if bincode can not
+    /// parse the raw bytes properly.
     pub fn get<V>(&self, _key: &str) -> Result<V>
     where
         V: DeserializeOwned,
@@ -207,7 +211,8 @@ impl MicroKV {
     }
 
     /// `put()` adds a new key-value pair to storage. It consumes
-    /// a string-type as a key, and any serializable value.
+    /// a string-type as a key, and any serializable value. It can return
+    /// errors if the lock is poisoned.
     pub fn put<V>(&self, _key: &str, _value: V) -> Result<()>
     where
         V: Serialize,
@@ -259,35 +264,32 @@ impl MicroKV {
     // Other key-value store helper operations
     //////////////////////////////////////////
 
-
     /// `lock_read()` is an arbitrary read-lock that encapsulates a read-only closure.
     /// This means that multiple concurrent readers can hold a lock and parse out data.
     pub fn lock_read<C, R>(&self, callback: C) -> Result<R>
     where
-        C: Fn(&KV) -> R
+        C: Fn(&KV) -> R,
     {
         let data = self.storage.read().map_err(|_| KVError {
             error: ErrorType::PoisonError,
-            msg: None
+            msg: None,
         })?;
         Ok(callback(&data))
     }
-
 
     /// `lock_write()` is an arbitrary write-lock that encapsulates a write-only closure.
     /// This means that only one single writer can hold a lock and mutate data, blocking any
     /// other readers/writers before the lock is released.
     pub fn lock_write<C, R>(&self, mut callback: C) -> Result<R>
     where
-        C: FnMut(&KV) -> R
+        C: FnMut(&KV) -> R,
     {
         let mut data = self.storage.write().map_err(|_| KVError {
             error: ErrorType::PoisonError,
-            msg: None
+            msg: None,
         })?;
         Ok(callback(&mut data))
     }
-
 
     /// `exists()` is a helper routine that acquires a reader lock and checks if a key exists
     /// within the IndexMap structure.
@@ -300,41 +302,64 @@ impl MicroKV {
         Ok(data.contains_key(&key))
     }
 
-
-    /// `keys()` safely consumes an iterator over the keys in
-    /// the IndexMap and returns a Vec for further use.
+    /// `keys()` safely consumes an iterator over the keys in the `IndexMap` and returns a
+    /// `Vec<String>` for further use.
     ///
-    /// Note that key iteration, not value iteration, is only
-    /// supported in order to preserve security guarentees.
-    pub fn keys(&self) -> Result<Vec<&str>> {
+    /// Note that key iteration, not value iteration, is only supported in order to preserve
+    /// security guarentees.
+    pub fn keys(&self) -> Result<Vec<String>> {
         let lock = self.storage.read().map_err(|_| KVError {
             error: ErrorType::PoisonError,
-            msg: None
+            msg: None,
         })?;
+
+        // initialize a copy to data
         let data = lock.clone();
-        Ok(data.keys()
-               .map(|x| x.as_str())
-               .collect::<Vec<&str>>())
+        let keys = data
+            .keys()
+            .map(|x| String::from(x))
+            .collect::<Vec<String>>();
+        Ok(keys)
     }
 
+    /// `keys()` safely consumes an iterator over a copy of in-place sorted keys in the
+    /// `IndexMap` and returns a `Vec<String>` for further use.
+    ///
+    /// Note that key iteration, not value iteration, is only supported in order to preserve
+    /// security guarentees.
+    pub fn sorted_keys(&self) -> Result<Vec<String>> {
+        let lock = self.storage.read().map_err(|_| KVError {
+            error: ErrorType::PoisonError,
+            msg: None,
+        })?;
 
-    pub fn sorted_keys(&self) -> Result<Vec<&str>> {
-        unimplemented!()
+        // initialize a copy to data, and sort keys in-place
+        let mut data = lock.clone();
+        data.sort_keys();
+        let keys = data
+            .keys()
+            .map(|x| String::from(x))
+            .collect::<Vec<String>>();
+        Ok(keys)
     }
 
+    /// `clear()` empties out the entire underlying `IndexMap` in O(n) time, but does
+    /// not delete the persistent storage file from disk. This ensures that the
+    /// `IndexMap` remains, and its capacity is kept the same.
+    pub fn clear(&self) -> Result<()> {
+        let mut data = self.storage.write().map_err(|_| KVError {
+            error: ErrorType::PoisonError,
+            msg: None,
+        })?;
 
-    pub iter_keys(&self) -> Result<()> {
-        unimplemented!()
-    }
+        // first, iterate over the IndexMap and coerce drop on the secure value wrappers
+        for (_, value) in data.iter_mut() {
+            value.zero_out();
+        }
 
-
-    pub iter_sorted_keys(&self) -> Result<()> {
-        unimplemented!()
-    }
-
-
-    pub fn destroy(&self) -> Result<()> {
-        unimplemented!()
+        // next, clear all entries from the IndexMap
+        data.clear();
+        Ok(())
     }
 
     ///////////////////
@@ -360,6 +385,12 @@ impl MicroKV {
         let ser = bincode::serialize(self).unwrap();
         file.write_all(&ser)?;
         Ok(())
+    }
+
+    /// `destruct()` securely clears the underlying data structure for the key-value store, and
+    /// deletes the database file, removing all traces of the database's existence.
+    pub fn destruct(&self) -> io::Result<()> {
+        unimplemented!();
     }
 }
 

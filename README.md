@@ -120,7 +120,7 @@ fn main() -> {
 
 * [ ] Unit tests
 * [ ] Client CLI
-* [ ] Other helper DB operations
+* [x] Other helper DB operations
 * [ ] Incorporate write-append logging/snapshotting
 * [ ] Threat model and design docs
 
