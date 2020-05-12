@@ -120,6 +120,7 @@ fn main() -> {
 
 * [ ] Unit tests
 * [ ] Client CLI
+* [ ] Performance Benchmarks against other ADTs
 * [x] Other helper DB operations
 * [ ] Incorporate write-append logging/snapshotting
 * [ ] Threat model and design docs
