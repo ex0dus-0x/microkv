@@ -1,5 +1,13 @@
 # microkv
 
+[![Actions][actions-badge]][actions-url]
+[![crates.io version][crates-microkv-badge]][crates-microkv]
+
+[actions-badge]: https://github.com/ex0dus-0x/microkv/workflows/CI/badge.svg?branch=master
+[actions-url]: https://github.com/ex0dus-0x/microkv/actions
+[crates-microkv-badge]: https://img.shields.io/crates/v/microkv.svg
+[crates-microkv]: https://crates.io/crates/microkv
+
 > NOTE: Functionally complete, but still WIP!
 
 a minimal and persistent key-value store designed with security in mind.
