@@ -1,7 +1,15 @@
 [package]
 name = "microkv"
+description = "a minimal and persistent key-value store designed with security in mind."
 version = "0.1.0"
+
 authors = ["ex0dus-0x <ex0dus at codemuch.tech>"]
+license = "MIT"
+
+homepage = "https://github.com/ex0dus-0x/microkv"
+documentation = "https://docs.rs/microkv"
+repository = "https://github.com/ex0dus-0x/microkv"
+readme = "README.md"
 
 edition = "2018"
 
