@@ -7,19 +7,20 @@
 
 use microkv::MicroKV;
 
-use clap::{Arg, App, SubCommand};
+use clap::{Arg, App, SubCommand, ArgMatches};
 
 
-fn main() -> std::io::Result<()> {
 
+fn parse_args<'a>() -> ArgMatches<'a> {
+
+    // define key arg to avoid repetition
     let key: &Arg = &Arg::with_name("key")
         .short("k")
         .long("key")
         .required(true)
         .takes_value(true);
 
-
-    let matches = App::new("microkv")
+    App::new("microkv")
         .version("1.0")
         .author("ex0dus <ex0dus at codemuch.tech>")
 
@@ -37,7 +38,7 @@ fn main() -> std::io::Result<()> {
         .arg(Arg::with_name("DATABASE")
              .required(true)
              .index(1)
-             .help("Name of database to interact with")
+             .help("Name of database to interact with. Will be created if doesn't exist.")
              .takes_value(false)
         )
 
@@ -73,7 +74,11 @@ fn main() -> std::io::Result<()> {
             .about("Deletes a key-value pair by key")
             .arg(key)
         )
-        .get_matches();
+        .get_matches()
+}
 
+
+fn main() -> std::io::Result<()> {
+    let args: ArgMatches = parse_args();
     Ok(())
 }
