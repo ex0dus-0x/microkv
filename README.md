@@ -2,11 +2,14 @@
 
 [![Actions][actions-badge]][actions-url]
 [![crates.io version][crates-microkv-badge]][crates-microkv]
+[![Docs badge]][docs-badge]
 
 [actions-badge]: https://github.com/ex0dus-0x/microkv/workflows/CI/badge.svg?branch=master
 [actions-url]: https://github.com/ex0dus-0x/microkv/actions
 [crates-microkv-badge]: https://img.shields.io/crates/v/microkv.svg
 [crates-microkv]: https://crates.io/crates/microkv
+[Docs badge]: https://img.shields.io/badge/docs.rs-rustdoc-green
+[docs.rs]: https://docs.rs/microkv
 
 > NOTE: Functionally complete, but still WIP!
 
@@ -26,6 +29,7 @@ Here are some specific use-cases that you may want to use __microkv__ for:
 
 * Local persistent serialization for sensitive configurations
 * Secrets management for a single-process application
+* License key management
 
 ## features
 

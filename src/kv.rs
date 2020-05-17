@@ -1,7 +1,13 @@
-//! kv.rs
+//! Defines the foundational structure and API for the key-value store implementation.
+//! The `kv` module should be used to spin up localized instances of the key-value store,
+//! and includes feature support for:
 //!
-//!     Defines the foundational structure and API that will enforce
-//!     how the key-value store will be implemented.
+//!     * database interaction operations
+//!         * sorted key iteration
+//!     * serialization to persistent storage
+//!     * symmetric authenticated cryptography
+//!     * mutual exclusion with RWlocks and mutexes
+//!     * secure memory wiping
 
 use std::env;
 use std::fs::{self, File, OpenOptions};
@@ -37,13 +43,13 @@ type KV = IndexMap<String, SecVec<u8>>;
 pub struct MicroKV {
     path: PathBuf,
 
-    // stores the actual key-value store encapsulated with a RwLock
+    /// stores the actual key-value store encapsulated with a RwLock
     storage: Arc<RwLock<KV>>,
 
-    // pseudorandom nonce that can be publicly known
+    /// pseudorandom nonce that can be publicly known
     nonce: Nonce,
 
-    // memory-guarded hashed password
+    /// memory-guarded hashed password
     #[serde(skip_serializing, skip_deserializing)]
     pwd: Option<SecStr>,
 }
