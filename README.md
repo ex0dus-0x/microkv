@@ -9,7 +9,7 @@
 [crates-microkv-badge]: https://img.shields.io/crates/v/microkv.svg
 [crates-microkv]: https://crates.io/crates/microkv
 [Docs badge]: https://img.shields.io/badge/docs.rs-rustdoc-green
-[docs.rs]: https://docs.rs/microkv
+[docs-badge]: https://docs.rs/microkv
 
 > NOTE: Functionally complete, but still WIP!
 
