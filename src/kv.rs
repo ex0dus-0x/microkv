@@ -2,12 +2,12 @@
 //! The `kv` module should be used to spin up localized instances of the key-value store,
 //! and includes feature support for:
 //!
-//!     * database interaction operations
-//!         * sorted key iteration
-//!     * serialization to persistent storage
-//!     * symmetric authenticated cryptography
-//!     * mutual exclusion with RWlocks and mutexes
-//!     * secure memory wiping
+//! * database interaction operations
+//!     * sorted key iteration
+//! * serialization to persistent storage
+//! * symmetric authenticated cryptography
+//! * mutual exclusion with RWlocks and mutexes
+//! * secure memory wiping
 
 use std::env;
 use std::fs::{self, File, OpenOptions};
@@ -105,7 +105,7 @@ impl MicroKV {
     /// name and the default workspace path.
     #[inline]
     fn get_db_path(name: &str) -> PathBuf {
-        let mut path = PathBuf::from(MicroKV::get_home_dir());
+        let mut path = MicroKV::get_home_dir();
         path.push(DEFAULT_WORKSPACE_PATH);
         path.push(name);
         path.set_extension("kv");
@@ -323,7 +323,7 @@ impl MicroKV {
         let data = lock.clone();
         let keys = data
             .keys()
-            .map(|x| String::from(x))
+            .map(|x| x.to_string())
             .collect::<Vec<String>>();
         Ok(keys)
     }
@@ -344,7 +344,7 @@ impl MicroKV {
         data.sort_keys();
         let keys = data
             .keys()
-            .map(|x| String::from(x))
+            .map(|x| x.to_string())
             .collect::<Vec<String>>();
         Ok(keys)
     }
@@ -402,10 +402,9 @@ impl MicroKV {
 
 // coerce a secure zero wipe
 impl Drop for MicroKV {
-    fn drop(&mut self) -> () {
-        match self.pwd {
-            Some(ref mut pwd) => pwd.zero_out(),
-            None => {}
+    fn drop(&mut self) {
+        if let Some(ref mut pwd) = self.pwd {
+            pwd.zero_out()
         }
     }
 }

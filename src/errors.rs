@@ -35,17 +35,20 @@ impl fmt::Debug for KVError {
 
 impl fmt::Display for KVError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} received from microKV: {}", "test", "test")
+        if let Some(msg) = &self.msg {
+            write!(f, "{:?} received from microkv with message: {}", self.error, msg)
+        } else {
+            write!(f, "{:?} received from microkv", self.error)
+        }
     }
 }
 
 // Enables us to unify any I/O errors with our error type.
 impl From<std::io::Error> for KVError {
     fn from(error: std::io::Error) -> Self {
-        let err = error.to_string().clone();
         KVError {
             error: ErrorType::FileError,
-            msg: Some(err),
+            msg: Some(error.to_string()),
         }
     }
 }
