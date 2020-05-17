@@ -2,13 +2,16 @@
 
 [![Actions][actions-badge]][actions-url]
 [![crates.io version][crates-microkv-badge]][crates-microkv]
-[![Docs badge]]
+[![Docs][docs-badge]][docs.rs]
 
 [actions-badge]: https://github.com/ex0dus-0x/microkv/workflows/CI/badge.svg?branch=master
 [actions-url]: https://github.com/ex0dus-0x/microkv/actions
+
 [crates-microkv-badge]: https://img.shields.io/crates/v/microkv.svg
 [crates-microkv]: https://crates.io/crates/microkv
-[Docs badge]: https://docs.rs/microkv/badge.svg
+
+[docs-badge]: https://docs.rs/microkv/badge.svg
+[docs.rs]: https://docs.rs/microkv
 
 > NOTE: Functionally complete, but still WIP!
 
