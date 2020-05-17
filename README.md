@@ -2,14 +2,13 @@
 
 [![Actions][actions-badge]][actions-url]
 [![crates.io version][crates-microkv-badge]][crates-microkv]
-[![Docs badge]][docs-badge]
+[![Docs badge]]
 
 [actions-badge]: https://github.com/ex0dus-0x/microkv/workflows/CI/badge.svg?branch=master
 [actions-url]: https://github.com/ex0dus-0x/microkv/actions
 [crates-microkv-badge]: https://img.shields.io/crates/v/microkv.svg
 [crates-microkv]: https://crates.io/crates/microkv
-[Docs badge]: https://img.shields.io/badge/docs.rs-rustdoc-green
-[docs-badge]: https://docs.rs/microkv
+[Docs badge]: https://docs.rs/microkv/badge.svg
 
 > NOTE: Functionally complete, but still WIP!
 
@@ -51,12 +50,13 @@ At its core, __microkv__ is implemented in ~500 LOCs, making the implementation 
 
 ## design
 
+(Still WIP)
+
 To see details about how microkv is internally implemented check out the `docs/` folder for the following documentation:
 
-* Threat Model
-* Internal Design
+* [Threat Model](https://github.com/ex0dus-0x/microkv/blob/master/docs/threat_model.md)
+* [Internal Design](https://github.com/ex0dus-0x/microkv/blob/master/docs/internal_design.md)
 
-(TODO)
 
 ## usage
 
@@ -69,6 +69,7 @@ To install locally, simply clone the repository and install with `cargo`:
 $ cargo install microkv
 
 # .. or locally
+$ git clone https://github.com/ex0dus-0x/microkv
 $ cargo install --path .
 ```
 
