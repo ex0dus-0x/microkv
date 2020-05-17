@@ -1,7 +1,4 @@
-//! errors.rs
-//!
-//!     Defines a portable error-handling  module for
-//!     use when encountering runtime exceptions.
+//! Defines a portable error-handling module for use when encountering runtime exceptions.
 
 use std::error::Error;
 use std::fmt;
@@ -42,7 +39,6 @@ impl<'a> fmt::Display for KVError<'a> {
     }
 }
 
-/*
 // Enables us to unify any I/O errors with our error type.
 impl<'a> From<std::io::Error> for KVError<'a> {
     fn from(error: std::io::Error) -> Self {
@@ -53,6 +49,5 @@ impl<'a> From<std::io::Error> for KVError<'a> {
         }
     }
 }
-*/
 
 impl<'a> Error for KVError<'a> {}

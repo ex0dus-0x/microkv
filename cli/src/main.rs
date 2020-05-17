@@ -47,7 +47,7 @@ fn parse_args<'a>() -> ArgMatches<'a> {
              .short("u")
              .long("unsafe")
              .required(false)
-             .help("")
+             .help("Interact with the database without encryption.")
              .takes_value(false)
         )
 
@@ -80,5 +80,7 @@ fn parse_args<'a>() -> ArgMatches<'a> {
 
 fn main() -> std::io::Result<()> {
     let args: ArgMatches = parse_args();
+
+
     Ok(())
 }
