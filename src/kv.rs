@@ -11,7 +11,7 @@
 
 use std::env;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -81,7 +81,7 @@ impl MicroKV {
     /// `open()` opens a previously instantiated and encrypted MicroKV given a db name.
     /// The public nonce generated from a previous session is also retrieved in order to
     /// do authenticated encryption later on.
-    pub fn open(dbname: &str) -> io::Result<Self> {
+    pub fn open(dbname: &str) -> Result<Self> {
         // initialize abspath to persistent db
         let path = MicroKV::get_db_path(dbname);
 
@@ -180,7 +180,7 @@ impl MicroKV {
                             None => {
                                 return Err(KVError {
                                     error: ErrorType::CryptoError,
-                                    msg: Some("cannot derive key from password hash"),
+                                    msg: Some("cannot derive key from password hash".to_string()),
                                 });
                             }
                         };
@@ -191,7 +191,7 @@ impl MicroKV {
                             Err(_) => {
                                 return Err(KVError {
                                     error: ErrorType::CryptoError,
-                                    msg: Some("cannot validate value being decrypted"),
+                                    msg: Some("cannot validate value being decrypted".to_string()),
                                 });
                             }
                         }
@@ -204,14 +204,14 @@ impl MicroKV {
                 // finally deserialize into deserializable object to return as
                 let value: V = bincode::deserialize(&deser_val).map_err(|_| KVError {
                     error: ErrorType::KVError,
-                    msg: Some("cannot deserialize into specified object type"),
+                    msg: Some("cannot deserialize into specified object type".to_string()),
                 })?;
                 Ok(value)
             }
 
             None => Err(KVError {
                 error: ErrorType::KVError,
-                msg: Some("key not found in storage"),
+                msg: Some("key not found in storage".to_string()),
             }),
         }
     }
@@ -375,7 +375,7 @@ impl MicroKV {
     /// `commit()` writes the IndexMap to a deserializable bincode file for fast persistent storage.
     /// A secure crypto construction is used in order to encrypt information to the store, such
     /// that it can't be read out.
-    pub fn commit(&self) -> io::Result<()> {
+    pub fn commit(&self) -> Result<()> {
         // initialize workspace directory if not exists
         let workspace_dir: &Path = Path::new(DEFAULT_WORKSPACE_PATH);
         if !workspace_dir.is_dir() {
@@ -395,7 +395,7 @@ impl MicroKV {
 
     /// `destruct()` securely clears the underlying data structure for the key-value store, and
     /// deletes the database file, removing all traces of the database's existence.
-    pub fn destruct(&self) -> io::Result<()> {
+    pub fn destruct(&self) -> Result<()> {
         unimplemented!();
     }
 }
