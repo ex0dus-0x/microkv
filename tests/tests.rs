@@ -6,9 +6,6 @@
 //!         - simple database interactions
 //!         - concurrent database interactions
 
-extern crate microkv;
-extern crate serde;
-
 use microkv::MicroKV;
 use serde::{Deserialize, Serialize};
 

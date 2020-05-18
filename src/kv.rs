@@ -104,7 +104,7 @@ impl MicroKV {
     /// `get_db_path()` is an inlined helper that forms an absolute path from a given database
     /// name and the default workspace path.
     #[inline]
-    fn get_db_path(name: &str) -> PathBuf {
+    pub fn get_db_path(name: &str) -> PathBuf {
         let mut path = MicroKV::get_home_dir();
         path.push(DEFAULT_WORKSPACE_PATH);
         path.push(name);
@@ -156,7 +156,7 @@ impl MicroKV {
     /// parse the raw bytes properly.
     pub fn get<V>(&self, _key: &str) -> Result<V>
     where
-        V: DeserializeOwned,
+        V: DeserializeOwned + 'static,
     {
         let key = String::from(_key);
         let lock = self.storage.read().map_err(|_| KVError {
@@ -321,10 +321,7 @@ impl MicroKV {
 
         // initialize a copy to data
         let data = lock.clone();
-        let keys = data
-            .keys()
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>();
+        let keys = data.keys().map(|x| x.to_string()).collect::<Vec<String>>();
         Ok(keys)
     }
 
@@ -342,10 +339,7 @@ impl MicroKV {
         // initialize a copy to data, and sort keys in-place
         let mut data = lock.clone();
         data.sort_keys();
-        let keys = data
-            .keys()
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>();
+        let keys = data.keys().map(|x| x.to_string()).collect::<Vec<String>>();
         Ok(keys)
     }
 
