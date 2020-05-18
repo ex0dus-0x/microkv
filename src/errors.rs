@@ -36,7 +36,11 @@ impl fmt::Debug for KVError {
 impl fmt::Display for KVError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(msg) = &self.msg {
-            write!(f, "{:?} received from microkv with message: {}", self.error, msg)
+            write!(
+                f,
+                "{:?} received from microkv with message: {}",
+                self.error, msg
+            )
         } else {
             write!(f, "{:?} received from microkv", self.error)
         }
