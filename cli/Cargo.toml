@@ -10,8 +10,9 @@ edition = "2018"
 [dependencies]
 
 clap = "2.33.0"
-microkv = { path = ".." }
+rpassword = "4.0.5"
+warp = "0.2.2"
 
-[[bin]]
-name = "microkv"
-path = "src/main.rs"
+tokio = { version = "0.2", features = ["macros"] }
+
+microkv = { path = ".." }

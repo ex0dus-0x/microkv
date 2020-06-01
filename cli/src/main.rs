@@ -5,7 +5,10 @@
 //!     as a client that interacts with a local persistent store or
 //!     one on another host and volume.
 
+use std::path::PathBuf;
+
 use microkv::MicroKV;
+use microkv::errors::Result;
 
 use clap::{Arg, App, SubCommand, ArgMatches};
 
@@ -51,6 +54,15 @@ fn parse_args<'a>() -> ArgMatches<'a> {
              .takes_value(false)
         )
 
+        // instantiate a server based off of the current KV in context
+        .arg(Arg::with_name("server")
+             .short("s")
+             .long("server")
+             .required(false)
+             .help("If specified, will initialize a HTTP service for interacting with KV. (if no address, default is 0.0.0.0:8080).")
+             .takes_value(true)
+        )
+
         // `put` adds a new key and value entry.
         .subcommand(SubCommand::with_name("put")
             .about("Adds a new key and value, encrypts and adds to storage.")
@@ -58,7 +70,7 @@ fn parse_args<'a>() -> ArgMatches<'a> {
             .arg(Arg::with_name("value")
                  .short("v")
                  .long("value")
-                 .required(false)
+                 .required(true)
                  .takes_value(true)
             )
         )
@@ -77,10 +89,92 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         .get_matches()
 }
 
+#[tokio::main]
+async fn run_server(addr: Vec<u8>, port: u64, kv: MicroKV, debug: bool) -> Result<'static, ()> {
+    todo!();
+}
 
-fn main() -> std::io::Result<()> {
+
+fn run() -> Result<'static, ()> {
     let args: ArgMatches = parse_args();
 
+    // check if debug is set
+    let debug: bool = args.is_present("debug");
 
+    // check if database file exists
+    let database: &str = args.value_of("database").unwrap();
+    let dbpath: PathBuf = MicroKV::get_db_path(database);
+
+    // initialize key-value object through database name
+    let mut kv: MicroKV = match dbpath.as_path().exists() {
+        true => MicroKV::open(database)?,
+        false => MicroKV::new(database)
+    };
+
+    // safely parse password unless --unsafe set
+    if !args.is_present("unsafe") {
+        let pass = rpassword::read_password_from_tty(Some("Password: ")).unwrap();
+        &kv.with_pwd_clear(pass);
+    }
+
+    // spin up a HTTP server if set, ignoring all other arguments. If not set,
+    // initialize as 0.0.0.0:8080
+    if args.is_present("server") {
+
+        // get server address
+        let (server_addr, port): (Vec<u8>, u64) = match args.value_of("server") {
+            Some(server) => {
+
+                // split into address and port
+                let split = server.split(":").collect::<Vec<&str>>();
+
+                // turn address string into Vec<u8>
+                let addr = split[0].split(".")
+                    .map(|x| x.parse::<u8>().unwrap())
+                    .collect::<Vec<u8>>();
+
+                (addr, split[1].parse::<u64>().unwrap())
+            },
+            None => (vec![0u8; 4], 8080)
+        };
+
+        // initialize server with error-handling
+        run_server(server_addr, port, kv, debug)?;
+        return Ok(())
+    }
+
+    // otherwise, interact with local db normally
+    match args.subcommand() {
+        ("put", Some(subargs)) => {
+            let key: &str = subargs.value_of("key").unwrap();
+            let value: &str = subargs.value_of("value").unwrap();
+
+            kv.put(key, value)?;
+            println!("Inserted new key-value entry into database `{}`", database);
+        },
+        ("get", Some(subargs)) => {
+            let key: &str = subargs.value_of("key").unwrap();
+
+            let value: &str = kv.get::<String>(key)?.as_str();
+            println!("{}", value);
+        },
+        ("rm", Some(subargs)) => {
+            let key: &str = subargs.value_of("key").unwrap();
+
+            kv.delete(key)?;
+            println!("Removed entry by key `{}`", key);
+        },
+        _ => {}
+    }
     Ok(())
+}
+
+
+fn main() {
+    match run() {
+        Err(e) => {
+            eprintln!("microkv returned error: {}", e)
+        },
+        _ => {}
+    }
 }
