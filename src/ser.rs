@@ -1,8 +1,6 @@
-//! ser.rs
-//!
-//!     Helper module that defines de/serialization routines
-//!     for Arc<RwLock<T>>s. Inspired by:
-//!     https://users.rust-lang.org/t/how-to-serialize-deserialize-an-async-std-rwlock-t-where-t-serialize-deserialize/37407/2
+//! Helper module that defines de/serialization routines
+//! for Arc<RwLock<T>>s. Inspired by:
+//! https://users.rust-lang.org/t/how-to-serialize-deserialize-an-async-std-rwlock-t-where-t-serialize-deserialize/37407/2
 
 // WIP!!
 #[allow(dead_code)]
