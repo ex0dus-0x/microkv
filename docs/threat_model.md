@@ -1,7 +1,6 @@
 # Threat Model
 
-> WIP!
-> Last Revision: May 1st, 2020
+> Last Revision: June 1st, 2020
 
 ## Introduction
 
@@ -22,7 +21,8 @@ The ideal implementation that __microkv__ should be used for primarily is a secr
 
 ## Threat Model
 
-The threat model is that of an attacker that has gained priviledged access to a machine, and has the capabilities to access the database disk file, and can also trace the process memory mappings for the CLI, or an application utilizing __microkv__. The key-value instance aims to mitigate these by ensuring that whenever interactions are made with the underlying storage structure, values are immediately encrypted and authenticated with XSalsa20
+The threat model is that of an attacker that has gained priviledged access to a machine, and has the capabilities to access the database disk file, and can also trace the process memory mappings for the CLI, or an application utilizing __microkv__. The key-value instance aims to mitigate these attackers by ensuring that whenever interactions are made with the underlying storage structure, values are immediately encrypted and authenticated with [XSalsa20-Poly1305](https://crypto.stackexchange.com/questions/33013/is-xsalsa20-poly1305-siv-a-reasonable-choice-for-nonce-misuse-resistant-authenti), which is a strong and modern authenticated encryption scheme.
 
-Another addressable threat is when malicious users attempt to boggle down performance for usability, throwing garbage
+## Questions or Concerns?
 
+Reach out to me!

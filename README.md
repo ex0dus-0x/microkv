@@ -39,13 +39,13 @@ Here are some specific use-cases that you may want to use __microkv__ for:
 
 __microkv__'s underlying map structure is based off of @bluss's [indexmap](https://github.com/bluss/indexmap) implementation, which offers performance on par with built-in `HashMap`'s amortized constant runtime, but can also provided sorted key iteration, similar to the less-performant `BTreeMap`. This provides a strong balance between performance and functionality.
 
-When reading and persisting to disk, the key-value store Uses `bincode` for fast de/serialization of the underlying structures, allowing users to insert any serializable structure without worrying about incurred overhead for storing complex data structures.
+When reading and persisting to disk, the key-value store uses `bincode` for fast de/serialization of the underlying structures, allowing users to insert any serializable structure without worrying about incurred overhead for storing complex data structures.
 
 * __Secure__
 
 __microkv__ acts almost in the sense of a secure enclave with any stored information. First, inserted values are immediately encryped using authenticated encryption with XSalsa20 (stream cipher) and Poly1305 (HMAC) from `sodiumoxide`, guarenteeing security and integrity. Encryped values in-memory are also memory-locked with `mlock`, and securely zeroed when destroyed to avoid persistence in memory pages.
 
-__microkv__ also provides locking support with `RwLock`s, which utilize mutual exclusion like mutexes, but robust in the sense that concurrent read locks can be held, but only one writer lock can be held at a time. This helps remove thread-safey and data race concerns, but also enables multiple read accesses safely.
+__microkv__ also provides locking support with `RwLock`s, which utilize mutual exclusion like mutexes, but robust in the sense that concurrent read locks can be held, but only one writer lock can be held at a time. This helps remove thread-safety and data race concerns, but also enables multiple read accesses safely.
 
 * __Small__
 
