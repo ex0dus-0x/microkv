@@ -9,7 +9,7 @@ use microkv::MicroKV;
 use serde::{Deserialize, Serialize};
 
 // constants used throughout each test case
-static KEY_NAME: &str = "some_KEY_NAME";
+static KEY_NAME: &str = "some_key";
 static TEST_PASSWORD: &str = "TEST_PASSWORD";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +29,17 @@ fn test_simple_integral() {
 
     // get key and validate
     let res: u64 = kv.get::<u64>(KEY_NAME).expect("cannot retrieve value");
+    assert_eq!(value, res);
+
+    // delete value
+    kv.delete(KEY_NAME).expect("cannot remove value");
+
+    // insert int value
+    let value: i32 = -12345;
+    kv.put(KEY_NAME, value).expect("cannot insert value");
+
+    // get key and validate
+    let res: i32 = kv.get::<i32>(KEY_NAME).expect("cannot retrieve value");
     assert_eq!(value, res);
 }
 
