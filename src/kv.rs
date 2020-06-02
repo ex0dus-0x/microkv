@@ -371,9 +371,10 @@ impl MicroKV {
     /// that it can't be read out.
     pub fn commit(&self) -> Result<()> {
         // initialize workspace directory if not exists
-        let workspace_dir: &Path = Path::new(DEFAULT_WORKSPACE_PATH);
+        let mut workspace_dir = MicroKV::get_home_dir();
+        workspace_dir.push(DEFAULT_WORKSPACE_PATH);
         if !workspace_dir.is_dir() {
-            fs::create_dir(DEFAULT_WORKSPACE_PATH)?;
+            fs::create_dir(workspace_dir)?;
         }
 
         // check if path to db exists, if not create it
