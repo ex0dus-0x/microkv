@@ -99,7 +99,7 @@ fn run() -> Result<'static, ()> {
     let debug: bool = args.is_present("debug");
 
     // check if database file exists
-    let database: &str = args.value_of("database").unwrap();
+    let database: &str = args.value_of("DATABASE").unwrap();
     let dbpath: PathBuf = MicroKV::get_db_path(database);
 
     // initialize key-value object through database name
@@ -107,6 +107,8 @@ fn run() -> Result<'static, ()> {
         true => MicroKV::open(database)?,
         false => MicroKV::new(database)
     };
+
+    // TODO: consume structured inputs either as string format or file
 
     // safely parse password unless --unsafe set
     if !args.is_present("unsafe") {
@@ -147,7 +149,8 @@ fn run() -> Result<'static, ()> {
             let value: &str = subargs.value_of("value").unwrap();
 
             kv.put(key, value)?;
-            println!("Inserted new key-value entry into database `{}`", database);
+            println!("Inserting key-value entry into database `{}`", database);
+            kv.commit()?;
         },
         ("get", Some(subargs)) => {
             let key: &str = subargs.value_of("key").unwrap();
@@ -160,9 +163,11 @@ fn run() -> Result<'static, ()> {
 
             kv.delete(key)?;
             println!("Removed entry by key `{}`", key);
+            kv.commit()?;
         },
         _ => {}
     }
+
     Ok(())
 }
 
@@ -170,7 +175,7 @@ fn run() -> Result<'static, ()> {
 fn main() {
     match run() {
         Err(e) => {
-            eprintln!("microkv returned error: {}", e)
+            eprintln!("{}", e)
         },
         _ => {}
     }
