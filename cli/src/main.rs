@@ -1,9 +1,6 @@
-//! main.rs
-//!
-//!     Defines main application interface to the micro-kv cli.
-//!     Can be used to either spin up a server instance or be used
-//!     as a client that interacts with a local persistent store or
-//!     one on another host and volume.
+//! Defines main application interface to the micro-kv cli. Can be used to either spin up a
+//! server instance or be used as a client that interacts with a local persistent store or
+//! one on another host and volume.
 
 use std::path::PathBuf;
 
@@ -114,7 +111,7 @@ fn run() -> Result<'static, ()> {
     // safely parse password unless --unsafe set
     if !args.is_present("unsafe") {
         let pass = rpassword::read_password_from_tty(Some("Password: ")).unwrap();
-        &kv.with_pwd_clear(pass);
+        kv = kv.with_pwd_clear(pass);
     }
 
     // spin up a HTTP server if set, ignoring all other arguments. If not set,
@@ -126,10 +123,10 @@ fn run() -> Result<'static, ()> {
             Some(server) => {
 
                 // split into address and port
-                let split = server.split(":").collect::<Vec<&str>>();
+                let split: Vec<&str> = server.split(":").collect::<Vec<&str>>();
 
                 // turn address string into Vec<u8>
-                let addr = split[0].split(".")
+                let addr: Vec<u8> = split[0].split(".")
                     .map(|x| x.parse::<u8>().unwrap())
                     .collect::<Vec<u8>>();
 
@@ -155,7 +152,7 @@ fn run() -> Result<'static, ()> {
         ("get", Some(subargs)) => {
             let key: &str = subargs.value_of("key").unwrap();
 
-            let value: &str = kv.get::<String>(key)?.as_str();
+            let value: String = kv.get::<String>(key)?;
             println!("{}", value);
         },
         ("rm", Some(subargs)) => {
