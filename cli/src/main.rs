@@ -10,7 +10,6 @@ use microkv::errors::Result;
 use clap::{Arg, App, SubCommand, ArgMatches};
 
 
-
 fn parse_args<'a>() -> ArgMatches<'a> {
 
     // define key arg to avoid repetition
@@ -82,6 +81,25 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         .subcommand(SubCommand::with_name("rm")
             .about("Deletes a key-value pair by key")
             .arg(key)
+        )
+
+        // `list` prints out all keys within the database
+        .subcommand(SubCommand::with_name("list")
+            .about("List out keys existing in the database")
+            .arg(Arg::with_name("sorted")
+                 .short("s")
+                 .long("sorted")
+                 .required(false)
+                 .takes_value(false)
+                 .help("Print out keys in sorted order")
+            )
+            .arg(Arg::with_name("values")
+                .short("v")
+                .long("values")
+                .required(false)
+                .takes_value(false)
+                .help("Include values when printing")
+            )
         )
         .get_matches()
 }
@@ -164,6 +182,16 @@ fn run() -> Result<'static, ()> {
             kv.delete(key)?;
             println!("Removed entry by key `{}`", key);
             kv.commit()?;
+        },
+        ("list", Some(subargs)) => {
+            let keys: Vec<String> = match subargs.is_present("sorted") {
+                true => kv.sorted_keys()?,
+                false => kv.keys()?
+            };
+            println!("Keys Present in Database:");
+            for key in keys {
+                println!("{}", key);
+            }
         },
         _ => {}
     }
