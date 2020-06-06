@@ -125,7 +125,7 @@ fn main() -> {
 
 ### cli
 
-(TODO)
+Check out usage for the microkv CLI application [here](https://github.com/ex0dus-0x/microkv/blob/master/cli/README.md).
 
 ## inspirations
 
