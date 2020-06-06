@@ -1,6 +1,6 @@
 [package]
-name = "microkv"
-version = "0.1.0"
+name = "microkv-cli"
+version = "0.2.3"
 authors = ["ex0dus-0x <ex0dus@codemuch.tech>"]
 
 edition = "2018"

@@ -19,8 +19,8 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         .required(true)
         .takes_value(true);
 
-    App::new("microkv")
-        .version("1.0")
+    App::new("microkv-cli")
+        .version("0.2.3")
         .author("ex0dus <ex0dus at codemuch.tech>")
 
         // make program verbose
