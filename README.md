@@ -132,15 +132,6 @@ Check out usage for the microkv CLI application [here](https://github.com/ex0dus
 * [rustbreak](https://github.com/TheNeikos/rustbreak)
 * [Writing a simple database in Rust](https://nikhilism.com/post/2016/writing-simple-database-in-rust-part-1/)
 
-## TODO
-
-* [ ] Unit tests
-* [ ] Client CLI
-* [ ] Performance Benchmarks against other ADTs
-* [x] Other helper DB operations
-* [ ] Incorporate write-append logging/snapshotting
-* [ ] Threat model and design docs
-
 ## license
 
 [mit license](https://codemuch.tech/license.txt)
