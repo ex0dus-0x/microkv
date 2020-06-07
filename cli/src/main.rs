@@ -4,14 +4,12 @@
 
 use std::path::PathBuf;
 
-use microkv::MicroKV;
 use microkv::errors::Result;
+use microkv::MicroKV;
 
-use clap::{Arg, App, SubCommand, ArgMatches};
-
+use clap::{App, Arg, ArgMatches, SubCommand};
 
 fn parse_args<'a>() -> ArgMatches<'a> {
-
     // define key arg to avoid repetition
     let key: &Arg = &Arg::with_name("key")
         .short("k")
@@ -109,7 +107,6 @@ async fn run_server(addr: Vec<u8>, port: u64, kv: MicroKV, debug: bool) -> Resul
     todo!();
 }
 
-
 fn run() -> Result<'static, ()> {
     let args: ArgMatches = parse_args();
 
@@ -123,7 +120,7 @@ fn run() -> Result<'static, ()> {
     // initialize key-value object through database name
     let mut kv: MicroKV = match dbpath.as_path().exists() {
         true => MicroKV::open(database)?,
-        false => MicroKV::new(database)
+        false => MicroKV::new(database),
     };
 
     // TODO: consume structured inputs either as string format or file
@@ -137,27 +134,26 @@ fn run() -> Result<'static, ()> {
     // spin up a HTTP server if set, ignoring all other arguments. If not set,
     // initialize as 0.0.0.0:8080
     if args.is_present("server") {
-
         // get server address
         let (server_addr, port): (Vec<u8>, u64) = match args.value_of("server") {
             Some(server) => {
-
                 // split into address and port
                 let split: Vec<&str> = server.split(":").collect::<Vec<&str>>();
 
                 // turn address string into Vec<u8>
-                let addr: Vec<u8> = split[0].split(".")
+                let addr: Vec<u8> = split[0]
+                    .split(".")
                     .map(|x| x.parse::<u8>().unwrap())
                     .collect::<Vec<u8>>();
 
                 (addr, split[1].parse::<u64>().unwrap())
-            },
-            None => (vec![0u8; 4], 8080)
+            }
+            None => (vec![0u8; 4], 8080),
         };
 
         // initialize server with error-handling
         run_server(server_addr, port, kv, debug)?;
-        return Ok(())
+        return Ok(());
     }
 
     // otherwise, interact with local db normally
@@ -169,42 +165,39 @@ fn run() -> Result<'static, ()> {
             kv.put(key, value)?;
             println!("Inserting key-value entry into database `{}`", database);
             kv.commit()?;
-        },
+        }
         ("get", Some(subargs)) => {
             let key: &str = subargs.value_of("key").unwrap();
 
             let value: String = kv.get::<String>(key)?;
             println!("{}", value);
-        },
+        }
         ("rm", Some(subargs)) => {
             let key: &str = subargs.value_of("key").unwrap();
 
             kv.delete(key)?;
             println!("Removed entry by key `{}`", key);
             kv.commit()?;
-        },
+        }
         ("list", Some(subargs)) => {
             let keys: Vec<String> = match subargs.is_present("sorted") {
                 true => kv.sorted_keys()?,
-                false => kv.keys()?
+                false => kv.keys()?,
             };
             println!("Keys Present in Database:");
             for key in keys {
                 println!("{}", key);
             }
-        },
+        }
         _ => {}
     }
 
     Ok(())
 }
 
-
 fn main() {
     match run() {
-        Err(e) => {
-            eprintln!("{}", e)
-        },
+        Err(e) => eprintln!("{}", e),
         _ => {}
     }
 }
