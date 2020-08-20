@@ -49,17 +49,12 @@ __microkv__ also provides locking support with `RwLock`s, which utilize mutual e
 
 * __Small__
 
-At its core, __microkv__ is implemented in ~500 LOCs, making the implementation portable and auditable. It does not offer extensions to other serializable formats, or any other user-involved configurability, meaning it will work right out of the box.
+At its core, __microkv__ is implemented in ~500 LOCs, making the implementation portable and auditable. It remains faithfully opinionated, meaning it will not offer extensions to other serializable formats, or any other user-involved configurability, allowing it to work right out of the box.
 
 ## design
 
-(Still WIP)
-
-To see details about how microkv is internally implemented check out the `docs/` folder for the following documentation:
-
-* [Threat Model](https://github.com/ex0dus-0x/microkv/blob/master/docs/threat_model.md)
-* [Internal Design](https://github.com/ex0dus-0x/microkv/blob/master/docs/internal_design.md)
-
+* [Internal Design](https://github.com/ex0dus-0x/microkv/wiki)
+* [Threat Model](https://github.com/ex0dus-0x/microkv/wiki/Threat-Model)
 
 ## usage
 
@@ -131,6 +126,10 @@ Check out usage for the microkv CLI application [here](https://github.com/ex0dus
 
 * [rustbreak](https://github.com/TheNeikos/rustbreak)
 * [Writing a simple database in Rust](https://nikhilism.com/post/2016/writing-simple-database-in-rust-part-1/)
+
+## contributions
+
+Interested on improving the state of this project? Check out the [issue tracker](https://github.com/ex0dus-0x/microkv/issues) for what we need help on!
 
 ## license
 
