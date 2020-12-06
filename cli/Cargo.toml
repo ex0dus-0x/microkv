@@ -1,6 +1,6 @@
 [package]
 name = "microkv-cli"
-version = "0.2.3"
+version = "0.2.4"
 authors = ["ex0dus-0x <ex0dus@codemuch.tech>"]
 
 edition = "2018"
@@ -8,11 +8,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-
 clap = "2.33.0"
 rpassword = "4.0.5"
-warp = "0.2.2"
-
-tokio = { version = "0.2", features = ["macros"] }
 
 microkv = { path = ".." }
