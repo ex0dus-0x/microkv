@@ -28,10 +28,6 @@ FLAGS:
     -u, --unsafe     Interact with the database without encryption.
     -V, --version    Prints version information
 
-OPTIONS:
-    -s, --server <server>    If specified, will initialize a HTTP service for interacting with KV. (if no address,
-                             default is 0.0.0.0:8080).
-
 ARGS:
     <DATABASE>    Name of database to interact with. Will be created if doesn't exist.
 
@@ -43,7 +39,7 @@ SUBCOMMANDS:
     rm      Deletes a key-value pair by key
 ```
 
-The `--server` option is still a WIP, but `microkv-cli` can still interact with a local persistent key-value store like so:
+`microkv-cli` can still interact with a local persistent key-value store like so:
 
 ```
 $ microkv-cli mydb put -k mykey -v myvalue
