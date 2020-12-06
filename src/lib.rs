@@ -7,7 +7,7 @@
 //! it is still optimal for use in a production-grade system/application that may not require the
 //! complex luxuries of a full-blown database or even industry-standard KV-store like Redis or LevelDB.
 //!
-//! ## use cases
+//! ## Use cases
 //!
 //! Here are some specific use-cases that you may want to use __microkv__ for:
 //!

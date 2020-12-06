@@ -6,8 +6,8 @@ use std::fmt;
 /// Aliases a custom `Result` type to return our specific error type.
 pub type Result<'a, T> = std::result::Result<T, KVError>;
 
-/// `ErrorType` defines the general implementation-level errors that
-/// may be reached during runtime execution.
+/// Defines the general implementation-level errors that
+/// may be reached during runtime.
 #[derive(Debug)]
 pub enum ErrorType {
     KVError,     // issues involving database interactions
@@ -16,8 +16,8 @@ pub enum ErrorType {
     PoisonError, // locking error, indicating poisoned mutex
 }
 
-/// `KVError` encapsulates an ErrorType, and is what ultimately
-/// gets returned to any user-facing code when and exception is handled.
+/// Encapsulates an ErrorType, and is what ultimately gets returned to
+/// any user-facing code when and exception is handled.
 pub struct KVError {
     pub error: ErrorType,
     pub msg: Option<String>,
