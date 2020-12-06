@@ -12,6 +12,8 @@
 //! ## Example
 //!
 //! ```rust
+//! use microkv::MicroKV;
+//!
 //! let kv: MicroKV = MicroKV::new("example").with_pwd_clear("p@ssw0rd".to_string());
 //!
 //! // put
@@ -24,7 +26,7 @@
 //! // delete
 //! kv.delete("keyname").expect("cannot delete key");
 //! ```
-#![allow(clippy::result_unit_err)]
+#![allow(clippy::result_map_unit_fn)]
 
 use std::env;
 use std::fs::{self, File, OpenOptions};
@@ -42,7 +44,6 @@ use sodiumoxide::crypto::hash::sha256;
 use sodiumoxide::crypto::secretbox::{self, Key, Nonce};
 
 use crate::errors::{ErrorType, KVError, Result};
-//use crate::ser::arclock;
 
 /// Defines the directory path where a key-value store
 /// (or multiple) can be interacted with.

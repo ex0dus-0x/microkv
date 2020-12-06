@@ -17,7 +17,6 @@
 
 pub mod errors;
 pub mod kv;
-mod ser;
 
 // re-import for accessible namespace
 pub use self::kv::MicroKV;
