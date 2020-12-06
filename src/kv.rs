@@ -1,13 +1,30 @@
 //! Defines the foundational structure and API for the key-value store implementation.
-//! The `kv` module should be used to spin up localized instances of the key-value store,
-//! and includes feature support for:
+//! The `kv` module should be used to spin up localized instances of the key-value store.
 //!
-//! * database interaction operations
-//!     * sorted key iteration
-//! * serialization to persistent storage
-//! * symmetric authenticated cryptography
-//! * mutual exclusion with RWlocks and mutexes
-//! * secure memory wiping
+//! ## Features
+//!
+//! * Database interaction operations, with sorted-key iteration possible
+//! * Serialization to persistent storage
+//! * Symmetric authenticated cryptography
+//! * Mutual exclusion with RWlocks and mutexes
+//! * Secure memory wiping
+//!
+//! ## Example
+//!
+//! ```rust
+//! let kv: MicroKV = MicroKV::new("example").with_pwd_clear("p@ssw0rd".to_string());
+//!
+//! // put
+//! kv.put("keyname", 123);
+//!
+//! // get
+//! let res: i32 = kv.get::<i32>("keyname").expect("cannot retrieve value");
+//! println!("{}", res);
+//!
+//! // delete
+//! kv.delete("keyname").expect("cannot delete key");
+//! ```
+#![allow(clippy::result_unit_err)]
 
 use std::env;
 use std::fs::{self, File, OpenOptions};
@@ -31,14 +48,13 @@ use crate::errors::{ErrorType, KVError, Result};
 /// (or multiple) can be interacted with.
 const DEFAULT_WORKSPACE_PATH: &str = ".microkv/";
 
-/// `KV` represents an alias to a base data structure that
-/// supports storing associated types. An `IndexMap` is a strong
-/// choice due to strong asymptotic performance with sorted key iteration.
+/// An alias to a base data structure that supports storing
+/// associated types. An `IndexMap` is a strong choice due to
+/// strong asymptotic performance with sorted key iteration.
 type KV = IndexMap<String, SecVec<u8>>;
 
-/// `MicroKV` defines the main interface structure
-/// in order to represent the most recent state of the data
-/// store.
+/// Defines the main interface structure to represent the most
+/// recent state of the data store.
 #[derive(Serialize, Deserialize)]
 pub struct MicroKV {
     path: PathBuf,
@@ -55,7 +71,7 @@ pub struct MicroKV {
 }
 
 impl MicroKV {
-    /// `new()` initializes a new empty and unencrypted MicroKV store with
+    /// Initializes a new empty and unencrypted MicroKV store with
     /// an identifying database name. This is the bare minimum that can operate as a
     /// key-value store, and can be configured using other builder methods.
     pub fn new(dbname: &str) -> Self {
@@ -78,7 +94,7 @@ impl MicroKV {
         }
     }
 
-    /// `open()` opens a previously instantiated and encrypted MicroKV given a db name.
+    /// Opens a previously instantiated and encrypted MicroKV, given a db name.
     /// The public nonce generated from a previous session is also retrieved in order to
     /// do authenticated encryption later on.
     pub fn open(dbname: &str) -> Result<Self> {
@@ -94,15 +110,13 @@ impl MicroKV {
         Ok(kv)
     }
 
-    /// `get_home_dir()` is an inlined helper that retrieves the home directory by resolving
-    /// $HOME, since `std::env::home_dir()` is depreciated.
+    /// Helper that retrieves the home directory by resolving $HOME
     #[inline]
     fn get_home_dir() -> PathBuf {
         PathBuf::from(env::var("HOME").unwrap())
     }
 
-    /// `get_db_path()` is an inlined helper that forms an absolute path from a given database
-    /// name and the default workspace path.
+    /// Helper that forms an absolute path from a given database name and the default workspace path.
     #[inline]
     pub fn get_db_path(name: &str) -> PathBuf {
         let mut path = MicroKV::get_home_dir();
@@ -121,25 +135,22 @@ impl MicroKV {
     }
     */
 
-    /// `with_pwd_clear()` builds up the MicroKV with a cleartext password, which is hashed using
+    /// Builds up the MicroKV with a cleartext password, which is hashed using
     /// the defaultly supported SHA-256 by `sodiumoxide`, in order to instantiate a 32-byte hash.
     ///
-    /// Ideally, this should be used if the password to encrypt is not naturally pseudorandom
-    /// and secured in-memory, and is instead read elsewhere, like a file or stdin (developer
-    /// should guarentee security when implementing such methods, as MicroKV only guarentees
-    /// hashing and secure storage).
+    /// Use if the password to encrypt is not naturally pseudorandom and secured in-memory,
+    /// and is instead read elsewhere, like a file or stdin (developer should guarentee security when
+    /// implementing such methods, as MicroKV only guarentees hashing and secure storage).
     pub fn with_pwd_clear(mut self, unsafe_pwd: String) -> Self {
         let pwd: SecStr = SecVec::new(sha256::hash(unsafe_pwd.as_bytes()).0.to_vec());
         self.pwd = Some(pwd);
         self
     }
 
-    /// `with_pwd_hash()` builds up the MicroKV with a hashed buffer, which is then locked securely
-    /// for later use.
+    /// Builds up the MicroKV with a hashed buffer, which is then locked securely `for later use.
     ///
-    /// Ideally, this should be used if the password to encrypt is generated as a pseudorandom
-    /// value, or previously hashed by another preferred one-way function within or outside the
-    /// application.
+    /// Use if the password to encrypt is generated as a pseudorandom value, or previously hashed by
+    /// another preferred one-way function within or outside the application.
     pub fn with_pwd_hash(mut self, _pwd: [u8; 32]) -> Self {
         let pwd: SecStr = SecVec::new(_pwd.to_vec());
         self.pwd = Some(pwd);
@@ -150,10 +161,8 @@ impl MicroKV {
     // Primitive key-value store operations
     ///////////////////////////////////////
 
-    /// `get()` retrieves a deserializable value based on
-    /// a given input key. Can return errors if lock is poisoned,
-    /// ciphertext decryption doesn't work, and if bincode can not
-    /// parse the raw bytes properly.
+    /// Decrypts and retrieves a value. Can return errors if lock is poisoned,
+    /// ciphertext decryption doesn't work, and if parsing bytes fail.
     pub fn get<V>(&self, _key: &str) -> Result<V>
     where
         V: DeserializeOwned + 'static,
@@ -216,9 +225,7 @@ impl MicroKV {
         }
     }
 
-    /// `put()` adds a new key-value pair to storage. It consumes
-    /// a string-type as a key, and any serializable value. It can return
-    /// errors if the lock is poisoned.
+    /// Encrypts and adds a new key-value pair to storage.
     pub fn put<V>(&self, _key: &str, _value: V) -> Result<()>
     where
         V: Serialize,
@@ -252,8 +259,7 @@ impl MicroKV {
         Ok(())
     }
 
-    /// `delete()` removes an entry in the key value store. Errors if the entry does
-    /// not exist or if the database is poisoned.
+    /// Delete removes an entry in the key value store.
     pub fn delete(&self, _key: &str) -> Result<()> {
         let key = String::from(_key);
         let mut data = self.storage.write().map_err(|_| KVError {
@@ -270,8 +276,8 @@ impl MicroKV {
     // Other key-value store helper operations
     //////////////////////////////////////////
 
-    /// `lock_read()` is an arbitrary read-lock that encapsulates a read-only closure.
-    /// This means that multiple concurrent readers can hold a lock and parse out data.
+    /// Arbitrary read-lock that encapsulates a read-only closure. Multiple concurrent readers
+    /// can hold a lock and parse out data.
     pub fn lock_read<C, R>(&self, callback: C) -> Result<R>
     where
         C: Fn(&KV) -> R,
@@ -283,9 +289,8 @@ impl MicroKV {
         Ok(callback(&data))
     }
 
-    /// `lock_write()` is an arbitrary write-lock that encapsulates a write-only closure.
-    /// This means that only one single writer can hold a lock and mutate data, blocking any
-    /// other readers/writers before the lock is released.
+    /// Arbitrary write-lock that encapsulates a write-only closure Single writer can hold a
+    /// lock and mutate data, blocking any other readers/writers before the lock is released.
     pub fn lock_write<C, R>(&self, mut callback: C) -> Result<R>
     where
         C: FnMut(&KV) -> R,
@@ -297,8 +302,7 @@ impl MicroKV {
         Ok(callback(&mut data))
     }
 
-    /// `exists()` is a helper routine that acquires a reader lock and checks if a key exists
-    /// within the IndexMap structure.
+    /// Helper routine that acquires a reader lock and checks if a key exists.
     pub fn exists<K>(&self, _key: &str) -> Result<bool> {
         let key = String::from(_key);
         let data = self.storage.read().map_err(|_| KVError {
@@ -308,7 +312,7 @@ impl MicroKV {
         Ok(data.contains_key(&key))
     }
 
-    /// `keys()` safely consumes an iterator over the keys in the `IndexMap` and returns a
+    /// Safely consumes an iterator over the keys in the `IndexMap` and returns a
     /// `Vec<String>` for further use.
     ///
     /// Note that key iteration, not value iteration, is only supported in order to preserve
@@ -325,7 +329,7 @@ impl MicroKV {
         Ok(keys)
     }
 
-    /// `keys()` safely consumes an iterator over a copy of in-place sorted keys in the
+    /// Safely consumes an iterator over a copy of in-place sorted keys in the
     /// `IndexMap` and returns a `Vec<String>` for further use.
     ///
     /// Note that key iteration, not value iteration, is only supported in order to preserve
@@ -343,9 +347,9 @@ impl MicroKV {
         Ok(keys)
     }
 
-    /// `clear()` empties out the entire underlying `IndexMap` in O(n) time, but does
-    /// not delete the persistent storage file from disk. This ensures that the
-    /// `IndexMap` remains, and its capacity is kept the same.
+    /// Empties out the entire underlying `IndexMap` in O(n) time, but does
+    /// not delete the persistent storage file from disk. The `IndexMap` remains,
+    /// and its capacity is kept the same.
     pub fn clear(&self) -> Result<()> {
         let mut data = self.storage.write().map_err(|_| KVError {
             error: ErrorType::PoisonError,
@@ -366,9 +370,7 @@ impl MicroKV {
     // I/O Operations
     ///////////////////
 
-    /// `commit()` writes the IndexMap to a deserializable bincode file for fast persistent storage.
-    /// A secure crypto construction is used in order to encrypt information to the store, such
-    /// that it can't be read out.
+    /// Writes the IndexMap to persistent storage after encrypting with secure crypto construction.
     pub fn commit(&self) -> Result<()> {
         // initialize workspace directory if not exists
         let mut workspace_dir = MicroKV::get_home_dir();
@@ -388,8 +390,7 @@ impl MicroKV {
         Ok(())
     }
 
-    /// `destruct()` securely clears the underlying data structure for the key-value store, and
-    /// deletes the database file, removing all traces of the database's existence.
+    /// Clears the underlying data structure for the key-value store, and deletes the database file to remove all traces.
     pub fn destruct(&self) -> Result<()> {
         unimplemented!();
     }
