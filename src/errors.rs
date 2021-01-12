@@ -4,7 +4,7 @@ use std::error::Error;
 use std::fmt;
 
 /// Aliases a custom `Result` type to return our specific error type.
-pub type Result<'a, T> = std::result::Result<T, KVError>;
+pub type Result<T> = std::result::Result<T, KVError>;
 
 /// Defines the general implementation-level errors that
 /// may be reached during runtime.

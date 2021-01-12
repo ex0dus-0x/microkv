@@ -13,11 +13,9 @@
 [docs-badge]: https://docs.rs/microkv/badge.svg
 [docs.rs]: https://docs.rs/microkv
 
-> NOTE: Functionally complete, but still WIP!
+Minimal and persistent key-value store designed with security in mind.
 
-a minimal and persistent key-value store designed with security in mind.
-
-## intro
+## Introduction
 
 __microkv__ is a persistent key-value store implemented in Rust, aiming to maintain a balance between security and performance. It is built out of a yearning to learn more about the intricacies of distributed systems, databases, and secure persistent storage.
 
@@ -25,15 +23,13 @@ While __microkv__ shouldn't be used in large-scale environments that facilitate 
 it is still optimal for use in a production-grade system/application that may not require the complex luxuries of a
 full-blown database or even industry-standard KV-store like Redis or LevelDB.
 
-## use cases
-
-Here are some specific use-cases that you may want to use __microkv__ for:
+### Example Use Cases
 
 * Local persistent serialization for sensitive configurations
 * Secrets management for a single-process application
 * License key management
 
-## features
+## Features
 
 * __Performant__
 
@@ -51,14 +47,12 @@ __microkv__ also provides locking support with `RwLock`s, which utilize mutual e
 
 At its core, __microkv__ is implemented in ~500 LOCs, making the implementation portable and auditable. It remains faithfully opinionated, meaning it will not offer extensions to other serializable formats, or any other user-involved configurability, allowing it to work right out of the box.
 
-## design
+## Design
 
 * [Internal Design](https://github.com/ex0dus-0x/microkv/wiki)
 * [Threat Model](https://github.com/ex0dus-0x/microkv/wiki/Threat-Model)
 
-## usage
-
-You can use microkv as both a library crate for your implementation, or a standalone CLI.
+## Usage
 
 To install locally, simply clone the repository and install with `cargo`:
 
@@ -71,19 +65,9 @@ $ git clone https://github.com/ex0dus-0x/microkv
 $ cargo install --path .
 ```
 
-Run `cargo test` to validate that the test suite works:
-
-```
-$ cargo test
-```
-
-### library
-
 Here's example usage of the `microkv` library crate:
 
 ```rust
-extern crate microkv;
-
 use microkv::MicroKV;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -118,19 +102,14 @@ fn main() -> {
 }
 ```
 
-### cli
+__microkv__ also includes a [simple command line application](https://github.com/ex0dus-0x/microkv/tree/master/cli)
+that is installed alongside the package. While not entirely useful at the moment, future plans are to be able 
+to integrate it such that it can be exposed through a Docker container.
 
-Check out usage for the microkv CLI application [here](https://github.com/ex0dus-0x/microkv/blob/master/cli/README.md).
-
-## inspirations
-
-* [rustbreak](https://github.com/TheNeikos/rustbreak)
-* [Writing a simple database in Rust](https://nikhilism.com/post/2016/writing-simple-database-in-rust-part-1/)
-
-## contributions
+## Contributions
 
 Interested on improving the state of this project? Check out the [issue tracker](https://github.com/ex0dus-0x/microkv/issues) for what we need help on!
 
-## license
+## License
 
-[mit license](https://codemuch.tech/license.txt)
+[MIT license](https://codemuch.tech/docs/license.txt)
