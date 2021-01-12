@@ -97,7 +97,7 @@ fn parse_args<'a>() -> ArgMatches<'a> {
         .get_matches()
 }
 
-fn run() -> Result<'static, ()> {
+fn run() -> Result<()> {
     let args: ArgMatches = parse_args();
 
     // check if debug is set

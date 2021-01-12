@@ -1,7 +1,7 @@
 [package]
 name = "microkv"
 description = "a minimal and persistent key-value store designed with security in mind."
-version = "0.2.4"
+version = "0.2.5"
 
 authors = ["ex0dus-0x <ex0dus at codemuch.tech>"]
 license = "MIT"
@@ -15,7 +15,6 @@ edition = "2018"
 
 [workspace]
 members = ["cli"]
-
 
 [dependencies]
 bincode = "1.2.1"

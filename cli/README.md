@@ -2,16 +2,6 @@
 
 Command line application implementation for __microkv__
 
-## Build
-
-Installing __microkv__ as so should already install the CLI component as well:
-
-```
-$ cargo install microkv
-```
-
-## Usage
-
 To display help options:
 
 ```
@@ -57,7 +47,3 @@ CryptoError received from microkv with message: cannot validate value being decr
 $ microkv-cli mydb rm -k mykey
 Removed entry by key `mykey`
 ```
-
-## License
-
-[MIT License](https://codemuch.tech/license.txt)
