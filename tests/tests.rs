@@ -25,7 +25,7 @@ fn test_simple_integral() {
 
     // insert uint value
     let value: u64 = 12345;
-    kv.put(KEY_NAME, value).expect("cannot insert value");
+    kv.put(KEY_NAME, &value).expect("cannot insert value");
 
     // get key and validate
     let res: u64 = kv.get::<u64>(KEY_NAME).expect("cannot retrieve value");
@@ -36,7 +36,7 @@ fn test_simple_integral() {
 
     // insert int value
     let value: i32 = -12345;
-    kv.put(KEY_NAME, value).expect("cannot insert value");
+    kv.put(KEY_NAME, &value).expect("cannot insert value");
 
     // get key and validate
     let res: i32 = kv.get::<i32>(KEY_NAME).expect("cannot retrieve value");
