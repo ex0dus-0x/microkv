@@ -17,7 +17,8 @@
 //! let kv: MicroKV = MicroKV::new("example").with_pwd_clear("p@ssw0rd".to_string());
 //!
 //! // put
-//! kv.put("keyname", 123);
+//! let value = 123;
+//! kv.put("keyname", &value);
 //!
 //! // get
 //! let res: i32 = kv.get::<i32>("keyname").expect("cannot retrieve value");
@@ -227,7 +228,7 @@ impl MicroKV {
     }
 
     /// Encrypts and adds a new key-value pair to storage.
-    pub fn put<V>(&self, _key: &str, _value: V) -> Result<()>
+    pub fn put<V>(&self, _key: &str, _value: &V) -> Result<()>
     where
         V: Serialize,
     {
@@ -304,7 +305,7 @@ impl MicroKV {
     }
 
     /// Helper routine that acquires a reader lock and checks if a key exists.
-    pub fn exists<K>(&self, _key: &str) -> Result<bool> {
+    pub fn exists(&self, _key: &str) -> Result<bool> {
         let key = String::from(_key);
         let data = self.storage.read().map_err(|_| KVError {
             error: ErrorType::PoisonError,
