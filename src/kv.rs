@@ -108,15 +108,19 @@ impl MicroKV {
     /// Open with base path
     pub fn open_with_base_path<S: AsRef<str>>(dbname: S, base_path: PathBuf) -> Result<Self> {
         // initialize abspath to persistent db
-        let path = MicroKV::get_db_path_with_base_path(dbname, base_path);
+        let path = MicroKV::get_db_path_with_base_path(dbname.as_ref(), base_path.clone());
 
-        // read kv raw serialized structure to kv_raw
-        let mut kv_raw: Vec<u8> = Vec::new();
-        File::open(path)?.read_to_end(&mut kv_raw)?;
+        if path.is_file() {
+            // read kv raw serialized structure to kv_raw
+            let mut kv_raw: Vec<u8> = Vec::new();
+            File::open(path)?.read_to_end(&mut kv_raw)?;
 
-        // deserialize with bincode and return
-        let kv: Self = bincode::deserialize(&kv_raw).unwrap();
-        Ok(kv)
+            // deserialize with bincode and return
+            let kv: Self = bincode::deserialize(&kv_raw).unwrap();
+            Ok(kv)
+        } else {
+            Ok(Self::new_with_base_path(dbname, base_path))
+        }
     }
 
     /// Opens a previously instantiated and encrypted MicroKV, given a db name.
@@ -182,7 +186,7 @@ impl MicroKV {
     }
 
     /// Set is auto commit
-    pub fn auto_commit(mut self, enable: bool) -> Self {
+    pub fn set_auto_commit(mut self, enable: bool) -> Self {
         self.is_auto_commit = enable;
         self
     }
@@ -288,8 +292,9 @@ impl MicroKV {
         data.insert(key, value);
 
         if !self.is_auto_commit {
-            Ok(())
+            return Ok(());
         }
+        drop(data);
         self.commit()
     }
 
@@ -305,8 +310,9 @@ impl MicroKV {
         let _ = data.remove(&key);
 
         if !self.is_auto_commit {
-            Ok(())
+            return Ok(());
         }
+        drop(data);
         self.commit()
     }
 
@@ -411,10 +417,20 @@ impl MicroKV {
     /// Writes the IndexMap to persistent storage after encrypting with secure crypto construction.
     pub fn commit(&self) -> Result<()> {
         // initialize workspace directory if not exists
-        let mut workspace_dir = MicroKV::get_home_dir();
-        workspace_dir.push(DEFAULT_WORKSPACE_PATH);
-        if !workspace_dir.is_dir() {
-            fs::create_dir(workspace_dir)?;
+        // let mut workspace_dir = MicroKV::get_home_dir();
+        // workspace_dir.push(DEFAULT_WORKSPACE_PATH);
+        match self.path.parent() {
+            Some(path) => {
+                if !path.is_dir() {
+                    fs::create_dir_all(path)?;
+                }
+            }
+            None => {
+                return Err(KVError {
+                    error: ErrorType::FileError,
+                    msg: Some("The store file parent path isn't sound".to_string()),
+                });
+            }
         }
 
         // check if path to db exists, if not create it
@@ -422,7 +438,7 @@ impl MicroKV {
         let mut file: File = OpenOptions::new().write(true).create(true).open(path)?;
 
         // acquire a file lock that unlocks at the end of scope
-        let _file_lock = Arc::new(Mutex::new(0));
+        // let _file_lock = Arc::new(Mutex::new(0));
         let ser = bincode::serialize(self).unwrap();
         file.write_all(&ser)?;
         Ok(())
