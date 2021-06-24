@@ -195,9 +195,23 @@ impl MicroKV {
     // Primitive key-value store operations
     ///////////////////////////////////////
 
+    /// unsafe get, may this api can change name to get_unwrap
+    pub fn get<K: AsRef<str>, V>(&self, _key: K) -> Result<V>
+    where
+        V: DeserializeOwned + 'static,
+    {
+        if let Some(v) = self.get_option(_key)? {
+            return Ok(v);
+        }
+        Err(KVError {
+            error: ErrorType::KVError,
+            msg: Some("key not found in storage".to_string()),
+        })
+    }
+
     /// Decrypts and retrieves a value. Can return errors if lock is poisoned,
     /// ciphertext decryption doesn't work, and if parsing bytes fail.
-    pub fn get<K: AsRef<str>, V>(&self, _key: K) -> Result<V>
+    pub fn get_option<K: AsRef<str>, V>(&self, _key: K) -> Result<Option<V>>
     where
         V: DeserializeOwned + 'static,
     {
@@ -249,13 +263,10 @@ impl MicroKV {
                     error: ErrorType::KVError,
                     msg: Some("cannot deserialize into specified object type".to_string()),
                 })?;
-                Ok(value)
+                Ok(Some(value))
             }
 
-            None => Err(KVError {
-                error: ErrorType::KVError,
-                msg: Some("key not found in storage".to_string()),
-            }),
+            None => Ok(None),
         }
     }
 

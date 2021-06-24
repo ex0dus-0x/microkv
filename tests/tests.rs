@@ -88,6 +88,7 @@ fn test_base_path_with_auto_commit() {
     kv.put(KEY_NAME, &value).expect("cannot insert value");
 
     // get key and validate
-    let res: String = kv.get(KEY_NAME).expect("cannot retrieve value");
-    assert_eq!(value, res);
+    let res: Option<String> = kv.get_option(KEY_NAME).expect("cannot retrieve value");
+    println!("{:?}", res);
+    assert_eq!(Some(value), res);
 }
