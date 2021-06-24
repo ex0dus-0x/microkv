@@ -78,7 +78,7 @@ struct Identity {
 }
 
 
-fn main() -> {
+fn main() {
     let unsafe_pwd: String = "my_password_123";
 
     // initialize database with (unsafe) cleartext password
@@ -87,7 +87,7 @@ fn main() -> {
 
     // simple interaction
     db.put("simple", 1);
-    print("{}", db.get::<i32>("simple").unwrap());
+    print("{}", db.get("simple").unwrap());
     db.delete("simple");
 
     // more complex interaction
