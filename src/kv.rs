@@ -87,8 +87,8 @@ impl MicroKV {
         Self {
             path,
             storage,
-            pwd,
             nonce,
+            pwd,
         }
     }
 
@@ -143,7 +143,7 @@ impl MicroKV {
     pub fn get_db_path_with_base_path<S: AsRef<str>>(name: S, mut base_path: PathBuf) -> PathBuf {
         base_path.push(name.as_ref());
         base_path.set_extension("kv");
-        base_path.clone()
+        base_path
     }
 
     /*
