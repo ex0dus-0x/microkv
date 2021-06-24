@@ -28,7 +28,7 @@ fn test_simple_integral() {
     kv.put(KEY_NAME, &value).expect("cannot insert value");
 
     // get key and validate
-    let res: u64 = kv.get::<u64>(KEY_NAME).expect("cannot retrieve value");
+    let res: u64 = kv.get(KEY_NAME).expect("cannot retrieve value");
     assert_eq!(value, res);
 
     // delete value
@@ -39,7 +39,7 @@ fn test_simple_integral() {
     kv.put(KEY_NAME, &value).expect("cannot insert value");
 
     // get key and validate
-    let res: i32 = kv.get::<i32>(KEY_NAME).expect("cannot retrieve value");
+    let res: i32 = kv.get(KEY_NAME).expect("cannot retrieve value");
     assert_eq!(value, res);
 }
 
@@ -52,7 +52,7 @@ fn test_simple_string() {
     kv.put(KEY_NAME, &value).expect("cannot insert value");
 
     // get key and validate
-    let res: String = kv.get::<String>(KEY_NAME).expect("cannot retrieve value");
+    let res: String = kv.get(KEY_NAME).expect("cannot retrieve value");
     assert_eq!(value, res);
 }
 
@@ -66,9 +66,7 @@ fn test_complex_struct() {
     };
     kv.put(KEY_NAME, &value).expect("cannot insert value");
 
-    let res: TestStruct = kv
-        .get::<TestStruct>(KEY_NAME)
-        .expect("cannot retrieve value");
+    let res: TestStruct = kv.get(KEY_NAME).expect("cannot retrieve value");
     assert_eq!(value.id, res.id);
     assert_eq!(value.name, res.name);
 }

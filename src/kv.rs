@@ -21,7 +21,7 @@
 //! kv.put("keyname", &value);
 //!
 //! // get
-//! let res: i32 = kv.get::<i32>("keyname").expect("cannot retrieve value");
+//! let res: i32 = kv.get("keyname").expect("cannot retrieve value");
 //! println!("{}", res);
 //!
 //! // delete
@@ -37,10 +37,8 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use indexmap::IndexMap;
 use secstr::{SecStr, SecVec};
-
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-
 use sodiumoxide::crypto::hash::sha256;
 use sodiumoxide::crypto::secretbox::{self, Key, Nonce};
 
@@ -73,10 +71,8 @@ pub struct MicroKV {
 }
 
 impl MicroKV {
-    /// Initializes a new empty and unencrypted MicroKV store with
-    /// an identifying database name. This is the bare minimum that can operate as a
-    /// key-value store, and can be configured using other builder methods.
-    pub fn new(dbname: &str) -> Self {
+    /// New MicroKV store with store to base path
+    pub fn new_with_base_path<S: AsRef<str>>(dbname: S, base_path: PathBuf) -> Self {
         let storage = Arc::new(RwLock::new(KV::new()));
 
         // no password, until set by `with_pwd_*` methods
@@ -86,7 +82,7 @@ impl MicroKV {
         let nonce: Nonce = secretbox::gen_nonce();
 
         // get abspath to dbname to write to.
-        let path = MicroKV::get_db_path(dbname);
+        let path = MicroKV::get_db_path_with_base_path(dbname, base_path);
 
         Self {
             path,
@@ -96,12 +92,19 @@ impl MicroKV {
         }
     }
 
-    /// Opens a previously instantiated and encrypted MicroKV, given a db name.
-    /// The public nonce generated from a previous session is also retrieved in order to
-    /// do authenticated encryption later on.
-    pub fn open(dbname: &str) -> Result<Self> {
+    /// Initializes a new empty and unencrypted MicroKV store with
+    /// an identifying database name. This is the bare minimum that can operate as a
+    /// key-value store, and can be configured using other builder methods.
+    pub fn new<S: AsRef<str>>(dbname: S) -> Self {
+        let mut path = MicroKV::get_home_dir();
+        path.push(DEFAULT_WORKSPACE_PATH);
+        Self::new_with_base_path(dbname, path)
+    }
+
+    /// Open with base path
+    pub fn open_with_base_path<S: AsRef<str>>(dbname: S, base_path: PathBuf) -> Result<Self> {
         // initialize abspath to persistent db
-        let path = MicroKV::get_db_path(dbname);
+        let path = MicroKV::get_db_path_with_base_path(dbname, base_path);
 
         // read kv raw serialized structure to kv_raw
         let mut kv_raw: Vec<u8> = Vec::new();
@@ -112,6 +115,15 @@ impl MicroKV {
         Ok(kv)
     }
 
+    /// Opens a previously instantiated and encrypted MicroKV, given a db name.
+    /// The public nonce generated from a previous session is also retrieved in order to
+    /// do authenticated encryption later on.
+    pub fn open<S: AsRef<str>>(dbname: S) -> Result<Self> {
+        let mut path = MicroKV::get_home_dir();
+        path.push(DEFAULT_WORKSPACE_PATH);
+        Self::open_with_base_path(dbname, path)
+    }
+
     /// Helper that retrieves the home directory by resolving $HOME
     #[inline]
     fn get_home_dir() -> PathBuf {
@@ -120,12 +132,18 @@ impl MicroKV {
 
     /// Helper that forms an absolute path from a given database name and the default workspace path.
     #[inline]
-    pub fn get_db_path(name: &str) -> PathBuf {
+    pub fn get_db_path<S: AsRef<str>>(name: S) -> PathBuf {
         let mut path = MicroKV::get_home_dir();
         path.push(DEFAULT_WORKSPACE_PATH);
-        path.push(name);
-        path.set_extension("kv");
-        path
+        Self::get_db_path_with_base_path(name, path)
+    }
+
+    /// with base path
+    #[inline]
+    pub fn get_db_path_with_base_path<S: AsRef<str>>(name: S, mut base_path: PathBuf) -> PathBuf {
+        base_path.push(name.as_ref());
+        base_path.set_extension("kv");
+        base_path.clone()
     }
 
     /*
@@ -143,8 +161,8 @@ impl MicroKV {
     /// Use if the password to encrypt is not naturally pseudorandom and secured in-memory,
     /// and is instead read elsewhere, like a file or stdin (developer should guarentee security when
     /// implementing such methods, as MicroKV only guarentees hashing and secure storage).
-    pub fn with_pwd_clear(mut self, unsafe_pwd: String) -> Self {
-        let pwd: SecStr = SecVec::new(sha256::hash(unsafe_pwd.as_bytes()).0.to_vec());
+    pub fn with_pwd_clear<S: AsRef<str>>(mut self, unsafe_pwd: S) -> Self {
+        let pwd: SecStr = SecVec::new(sha256::hash(unsafe_pwd.as_ref().as_bytes()).0.to_vec());
         self.pwd = Some(pwd);
         self
     }
@@ -165,11 +183,11 @@ impl MicroKV {
 
     /// Decrypts and retrieves a value. Can return errors if lock is poisoned,
     /// ciphertext decryption doesn't work, and if parsing bytes fail.
-    pub fn get<V>(&self, _key: &str) -> Result<V>
+    pub fn get<K: AsRef<str>, V>(&self, _key: K) -> Result<V>
     where
         V: DeserializeOwned + 'static,
     {
-        let key = String::from(_key);
+        let key = _key.as_ref().to_string();
         let lock = self.storage.read().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
@@ -228,11 +246,11 @@ impl MicroKV {
     }
 
     /// Encrypts and adds a new key-value pair to storage.
-    pub fn put<V>(&self, _key: &str, _value: &V) -> Result<()>
+    pub fn put<K: AsRef<str>, V>(&self, _key: K, _value: &V) -> Result<()>
     where
         V: Serialize,
     {
-        let key = String::from(_key);
+        let key = _key.as_ref().to_string();
         let mut data = self.storage.write().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
@@ -262,8 +280,8 @@ impl MicroKV {
     }
 
     /// Delete removes an entry in the key value store.
-    pub fn delete(&self, _key: &str) -> Result<()> {
-        let key = String::from(_key);
+    pub fn delete<K: AsRef<str>>(&self, _key: K) -> Result<()> {
+        let key = _key.as_ref().to_string();
         let mut data = self.storage.write().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
@@ -305,8 +323,8 @@ impl MicroKV {
     }
 
     /// Helper routine that acquires a reader lock and checks if a key exists.
-    pub fn exists(&self, _key: &str) -> Result<bool> {
-        let key = String::from(_key);
+    pub fn exists<K: AsRef<str>>(&self, _key: K) -> Result<bool> {
+        let key = _key.as_ref().to_string();
         let data = self.storage.read().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
