@@ -68,6 +68,9 @@ pub struct MicroKV {
     /// memory-guarded hashed password
     #[serde(skip_serializing, skip_deserializing)]
     pwd: Option<SecStr>,
+
+    /// is auto commit
+    is_auto_commit: bool,
 }
 
 impl MicroKV {
@@ -89,6 +92,7 @@ impl MicroKV {
             storage,
             nonce,
             pwd,
+            is_auto_commit: false,
         }
     }
 
@@ -174,6 +178,12 @@ impl MicroKV {
     pub fn with_pwd_hash(mut self, _pwd: [u8; 32]) -> Self {
         let pwd: SecStr = SecVec::new(_pwd.to_vec());
         self.pwd = Some(pwd);
+        self
+    }
+
+    /// Set is auto commit
+    pub fn auto_commit(mut self, enable: bool) -> Self {
+        self.is_auto_commit = enable;
         self
     }
 
@@ -276,7 +286,11 @@ impl MicroKV {
             None => SecVec::new(ser_val),
         };
         data.insert(key, value);
-        Ok(())
+
+        if !self.is_auto_commit {
+            Ok(())
+        }
+        self.commit()
     }
 
     /// Delete removes an entry in the key value store.
@@ -289,7 +303,11 @@ impl MicroKV {
 
         // delete entry from BTreeMap by key
         let _ = data.remove(&key);
-        Ok(())
+
+        if !self.is_auto_commit {
+            Ok(())
+        }
+        self.commit()
     }
 
     //////////////////////////////////////////
