@@ -196,7 +196,7 @@ impl MicroKV {
     ///////////////////////////////////////
 
     /// unsafe get, may this api can change name to get_unwrap
-    pub fn get<K: AsRef<str>, V>(&self, _key: K) -> Result<V>
+    pub fn get_unwrap<K: AsRef<str>, V>(&self, _key: K) -> Result<V>
     where
         V: DeserializeOwned + 'static,
     {
@@ -211,7 +211,7 @@ impl MicroKV {
 
     /// Decrypts and retrieves a value. Can return errors if lock is poisoned,
     /// ciphertext decryption doesn't work, and if parsing bytes fail.
-    pub fn get_option<K: AsRef<str>, V>(&self, _key: K) -> Result<Option<V>>
+    pub fn get<K: AsRef<str>, V>(&self, _key: K) -> Result<Option<V>>
     where
         V: DeserializeOwned + 'static,
     {
