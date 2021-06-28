@@ -134,8 +134,8 @@ fn run() -> Result<()> {
         ("get", Some(subargs)) => {
             let key: &str = subargs.value_of("key").unwrap();
 
-            let value: String = kv.get(key)?;
-            println!("{}", value);
+            let value: Option<String> = kv.get(key)?;
+            println!("{}", value.unwrap_or("<None>".to_string()));
         }
         ("rm", Some(subargs)) => {
             let key: &str = subargs.value_of("key").unwrap();

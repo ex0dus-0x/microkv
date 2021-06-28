@@ -30,7 +30,7 @@ fn test_simple_integral() {
     kv.put(KEY_NAME, &value).expect("cannot insert value");
 
     // get key and validate
-    let res: u64 = kv.get(KEY_NAME).expect("cannot retrieve value");
+    let res: u64 = kv.get_unwrap(KEY_NAME).expect("cannot retrieve value");
     assert_eq!(value, res);
 
     // delete value
@@ -41,7 +41,7 @@ fn test_simple_integral() {
     kv.put(KEY_NAME, &value).expect("cannot insert value");
 
     // get key and validate
-    let res: i32 = kv.get(KEY_NAME).expect("cannot retrieve value");
+    let res: i32 = kv.get_unwrap(KEY_NAME).expect("cannot retrieve value");
     assert_eq!(value, res);
 }
 
@@ -54,7 +54,7 @@ fn test_simple_string() {
     kv.put(KEY_NAME, &value).expect("cannot insert value");
 
     // get key and validate
-    let res: String = kv.get(KEY_NAME).expect("cannot retrieve value");
+    let res: String = kv.get_unwrap(KEY_NAME).expect("cannot retrieve value");
     assert_eq!(value, res);
 }
 
@@ -68,7 +68,7 @@ fn test_complex_struct() {
     };
     kv.put(KEY_NAME, &value).expect("cannot insert value");
 
-    let res: TestStruct = kv.get(KEY_NAME).expect("cannot retrieve value");
+    let res: TestStruct = kv.get_unwrap(KEY_NAME).expect("cannot retrieve value");
     assert_eq!(value.id, res.id);
     assert_eq!(value.name, res.name);
 }
@@ -88,7 +88,7 @@ fn test_base_path_with_auto_commit() {
     kv.put(KEY_NAME, &value).expect("cannot insert value");
 
     // get key and validate
-    let res: Option<String> = kv.get_option(KEY_NAME).expect("cannot retrieve value");
+    let res: Option<String> = kv.get(KEY_NAME).expect("cannot retrieve value");
     println!("{:?}", res);
     assert_eq!(Some(value), res);
 }

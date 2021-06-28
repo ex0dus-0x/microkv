@@ -21,7 +21,7 @@
 //! kv.put("keyname", &value);
 //!
 //! // get
-//! let res: i32 = kv.get("keyname").expect("cannot retrieve value");
+//! let res: i32 = kv.get_unwrap("keyname").expect("cannot retrieve value");
 //! println!("{}", res);
 //!
 //! // delete
@@ -33,7 +33,7 @@ use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use indexmap::IndexMap;
 use secstr::{SecStr, SecVec};
@@ -200,7 +200,7 @@ impl MicroKV {
     where
         V: DeserializeOwned + 'static,
     {
-        if let Some(v) = self.get_option(_key)? {
+        if let Some(v) = self.get(_key)? {
             return Ok(v);
         }
         Err(KVError {

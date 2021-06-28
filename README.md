@@ -87,7 +87,7 @@ fn main() {
 
     // simple interaction
     db.put("simple", 1);
-    print("{}", db.get("simple").unwrap());
+    print("{}", db.get_unwrap("simple").unwrap());
     db.delete("simple");
 
     // more complex interaction
@@ -97,7 +97,8 @@ fn main() {
         sensitive_data: String::from("something_important_here")
     };
     db.put("complex", identity);
-    print("{:?}", db.get::<Identity>("complex").unwrap());
+    let stored_identity: Identity = db.get_unwrap("complex").unwrap();
+    println!("{:?}", stored_identity);
     db.delete("complex");
 }
 ```
