@@ -124,18 +124,18 @@ fn run() -> Result<()> {
     // otherwise, interact with local db normally
     match args.subcommand() {
         ("put", Some(subargs)) => {
-            let key: &str = subargs.value_of("key").unwrap();
-            let value: &str = subargs.value_of("value").unwrap();
+            let key = subargs.value_of("key").unwrap().to_string();
+            let value = subargs.value_of("value").unwrap().to_string();
 
-            kv.put(key, value)?;
+            kv.put(key, &value)?;
             println!("Inserting key-value entry into database `{}`", database);
             kv.commit()?;
         }
         ("get", Some(subargs)) => {
             let key: &str = subargs.value_of("key").unwrap();
 
-            let value: String = kv.get::<String>(key)?;
-            println!("{}", value);
+            let value: Option<String> = kv.get(key)?;
+            println!("{}", value.unwrap_or("<None>".to_string()));
         }
         ("rm", Some(subargs)) => {
             let key: &str = subargs.value_of("key").unwrap();
