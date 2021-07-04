@@ -21,7 +21,7 @@
 //! kv.put("keyname", &value);
 //!
 //! // get
-//! let res: i32 = kv.get::<i32>("keyname").expect("cannot retrieve value");
+//! let res: i32 = kv.get_unwrap("keyname").expect("cannot retrieve value");
 //! println!("{}", res);
 //!
 //! // delete
@@ -33,14 +33,12 @@ use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use indexmap::IndexMap;
 use secstr::{SecStr, SecVec};
-
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-
 use sodiumoxide::crypto::hash::sha256;
 use sodiumoxide::crypto::secretbox::{self, Key, Nonce};
 
@@ -70,13 +68,14 @@ pub struct MicroKV {
     /// memory-guarded hashed password
     #[serde(skip_serializing, skip_deserializing)]
     pwd: Option<SecStr>,
+
+    /// is auto commit
+    is_auto_commit: bool,
 }
 
 impl MicroKV {
-    /// Initializes a new empty and unencrypted MicroKV store with
-    /// an identifying database name. This is the bare minimum that can operate as a
-    /// key-value store, and can be configured using other builder methods.
-    pub fn new(dbname: &str) -> Self {
+    /// New MicroKV store with store to base path
+    pub fn new_with_base_path<S: AsRef<str>>(dbname: S, base_path: PathBuf) -> Self {
         let storage = Arc::new(RwLock::new(KV::new()));
 
         // no password, until set by `with_pwd_*` methods
@@ -86,30 +85,51 @@ impl MicroKV {
         let nonce: Nonce = secretbox::gen_nonce();
 
         // get abspath to dbname to write to.
-        let path = MicroKV::get_db_path(dbname);
+        let path = MicroKV::get_db_path_with_base_path(dbname, base_path);
 
         Self {
             path,
             storage,
-            pwd,
             nonce,
+            pwd,
+            is_auto_commit: false,
+        }
+    }
+
+    /// Initializes a new empty and unencrypted MicroKV store with
+    /// an identifying database name. This is the bare minimum that can operate as a
+    /// key-value store, and can be configured using other builder methods.
+    pub fn new<S: AsRef<str>>(dbname: S) -> Self {
+        let mut path = MicroKV::get_home_dir();
+        path.push(DEFAULT_WORKSPACE_PATH);
+        Self::new_with_base_path(dbname, path)
+    }
+
+    /// Open with base path
+    pub fn open_with_base_path<S: AsRef<str>>(dbname: S, base_path: PathBuf) -> Result<Self> {
+        // initialize abspath to persistent db
+        let path = MicroKV::get_db_path_with_base_path(dbname.as_ref(), base_path.clone());
+
+        if path.is_file() {
+            // read kv raw serialized structure to kv_raw
+            let mut kv_raw: Vec<u8> = Vec::new();
+            File::open(path)?.read_to_end(&mut kv_raw)?;
+
+            // deserialize with bincode and return
+            let kv: Self = bincode::deserialize(&kv_raw).unwrap();
+            Ok(kv)
+        } else {
+            Ok(Self::new_with_base_path(dbname, base_path))
         }
     }
 
     /// Opens a previously instantiated and encrypted MicroKV, given a db name.
     /// The public nonce generated from a previous session is also retrieved in order to
     /// do authenticated encryption later on.
-    pub fn open(dbname: &str) -> Result<Self> {
-        // initialize abspath to persistent db
-        let path = MicroKV::get_db_path(dbname);
-
-        // read kv raw serialized structure to kv_raw
-        let mut kv_raw: Vec<u8> = Vec::new();
-        File::open(path)?.read_to_end(&mut kv_raw)?;
-
-        // deserialize with bincode and return
-        let kv: Self = bincode::deserialize(&kv_raw).unwrap();
-        Ok(kv)
+    pub fn open<S: AsRef<str>>(dbname: S) -> Result<Self> {
+        let mut path = MicroKV::get_home_dir();
+        path.push(DEFAULT_WORKSPACE_PATH);
+        Self::open_with_base_path(dbname, path)
     }
 
     /// Helper that retrieves the home directory by resolving $HOME
@@ -120,12 +140,18 @@ impl MicroKV {
 
     /// Helper that forms an absolute path from a given database name and the default workspace path.
     #[inline]
-    pub fn get_db_path(name: &str) -> PathBuf {
+    pub fn get_db_path<S: AsRef<str>>(name: S) -> PathBuf {
         let mut path = MicroKV::get_home_dir();
         path.push(DEFAULT_WORKSPACE_PATH);
-        path.push(name);
-        path.set_extension("kv");
-        path
+        Self::get_db_path_with_base_path(name, path)
+    }
+
+    /// with base path
+    #[inline]
+    pub fn get_db_path_with_base_path<S: AsRef<str>>(name: S, mut base_path: PathBuf) -> PathBuf {
+        base_path.push(name.as_ref());
+        base_path.set_extension("kv");
+        base_path
     }
 
     /*
@@ -143,8 +169,8 @@ impl MicroKV {
     /// Use if the password to encrypt is not naturally pseudorandom and secured in-memory,
     /// and is instead read elsewhere, like a file or stdin (developer should guarentee security when
     /// implementing such methods, as MicroKV only guarentees hashing and secure storage).
-    pub fn with_pwd_clear(mut self, unsafe_pwd: String) -> Self {
-        let pwd: SecStr = SecVec::new(sha256::hash(unsafe_pwd.as_bytes()).0.to_vec());
+    pub fn with_pwd_clear<S: AsRef<str>>(mut self, unsafe_pwd: S) -> Self {
+        let pwd: SecStr = SecVec::new(sha256::hash(unsafe_pwd.as_ref().as_bytes()).0.to_vec());
         self.pwd = Some(pwd);
         self
     }
@@ -159,17 +185,37 @@ impl MicroKV {
         self
     }
 
+    /// Set is auto commit
+    pub fn set_auto_commit(mut self, enable: bool) -> Self {
+        self.is_auto_commit = enable;
+        self
+    }
+
     ///////////////////////////////////////
     // Primitive key-value store operations
     ///////////////////////////////////////
 
-    /// Decrypts and retrieves a value. Can return errors if lock is poisoned,
-    /// ciphertext decryption doesn't work, and if parsing bytes fail.
-    pub fn get<V>(&self, _key: &str) -> Result<V>
+    /// unsafe get, may this api can change name to get_unwrap
+    pub fn get_unwrap<K: AsRef<str>, V>(&self, _key: K) -> Result<V>
     where
         V: DeserializeOwned + 'static,
     {
-        let key = String::from(_key);
+        if let Some(v) = self.get(_key)? {
+            return Ok(v);
+        }
+        Err(KVError {
+            error: ErrorType::KVError,
+            msg: Some("key not found in storage".to_string()),
+        })
+    }
+
+    /// Decrypts and retrieves a value. Can return errors if lock is poisoned,
+    /// ciphertext decryption doesn't work, and if parsing bytes fail.
+    pub fn get<K: AsRef<str>, V>(&self, _key: K) -> Result<Option<V>>
+    where
+        V: DeserializeOwned + 'static,
+    {
+        let key = _key.as_ref().to_string();
         let lock = self.storage.read().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
@@ -217,22 +263,19 @@ impl MicroKV {
                     error: ErrorType::KVError,
                     msg: Some("cannot deserialize into specified object type".to_string()),
                 })?;
-                Ok(value)
+                Ok(Some(value))
             }
 
-            None => Err(KVError {
-                error: ErrorType::KVError,
-                msg: Some("key not found in storage".to_string()),
-            }),
+            None => Ok(None),
         }
     }
 
     /// Encrypts and adds a new key-value pair to storage.
-    pub fn put<V>(&self, _key: &str, _value: &V) -> Result<()>
+    pub fn put<K: AsRef<str>, V>(&self, _key: K, _value: &V) -> Result<()>
     where
         V: Serialize,
     {
-        let key = String::from(_key);
+        let key = _key.as_ref().to_string();
         let mut data = self.storage.write().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
@@ -258,12 +301,17 @@ impl MicroKV {
             None => SecVec::new(ser_val),
         };
         data.insert(key, value);
-        Ok(())
+
+        if !self.is_auto_commit {
+            return Ok(());
+        }
+        drop(data);
+        self.commit()
     }
 
     /// Delete removes an entry in the key value store.
-    pub fn delete(&self, _key: &str) -> Result<()> {
-        let key = String::from(_key);
+    pub fn delete<K: AsRef<str>>(&self, _key: K) -> Result<()> {
+        let key = _key.as_ref().to_string();
         let mut data = self.storage.write().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
@@ -271,7 +319,12 @@ impl MicroKV {
 
         // delete entry from BTreeMap by key
         let _ = data.remove(&key);
-        Ok(())
+
+        if !self.is_auto_commit {
+            return Ok(());
+        }
+        drop(data);
+        self.commit()
     }
 
     //////////////////////////////////////////
@@ -305,8 +358,8 @@ impl MicroKV {
     }
 
     /// Helper routine that acquires a reader lock and checks if a key exists.
-    pub fn exists(&self, _key: &str) -> Result<bool> {
-        let key = String::from(_key);
+    pub fn exists<K: AsRef<str>>(&self, _key: K) -> Result<bool> {
+        let key = _key.as_ref().to_string();
         let data = self.storage.read().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
@@ -375,10 +428,20 @@ impl MicroKV {
     /// Writes the IndexMap to persistent storage after encrypting with secure crypto construction.
     pub fn commit(&self) -> Result<()> {
         // initialize workspace directory if not exists
-        let mut workspace_dir = MicroKV::get_home_dir();
-        workspace_dir.push(DEFAULT_WORKSPACE_PATH);
-        if !workspace_dir.is_dir() {
-            fs::create_dir(workspace_dir)?;
+        // let mut workspace_dir = MicroKV::get_home_dir();
+        // workspace_dir.push(DEFAULT_WORKSPACE_PATH);
+        match self.path.parent() {
+            Some(path) => {
+                if !path.is_dir() {
+                    fs::create_dir_all(path)?;
+                }
+            }
+            None => {
+                return Err(KVError {
+                    error: ErrorType::FileError,
+                    msg: Some("The store file parent path isn't sound".to_string()),
+                });
+            }
         }
 
         // check if path to db exists, if not create it
@@ -386,7 +449,7 @@ impl MicroKV {
         let mut file: File = OpenOptions::new().write(true).create(true).open(path)?;
 
         // acquire a file lock that unlocks at the end of scope
-        let _file_lock = Arc::new(Mutex::new(0));
+        // let _file_lock = Arc::new(Mutex::new(0));
         let ser = bincode::serialize(self).unwrap();
         file.write_all(&ser)?;
         Ok(())
