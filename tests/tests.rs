@@ -4,7 +4,8 @@
 //! - simple database interactions
 //! - concurrent database interactions
 
-use std::env;
+use std::sync::Arc;
+use std::{env, thread};
 
 use serde::{Deserialize, Serialize};
 
@@ -91,4 +92,33 @@ fn test_base_path_with_auto_commit() {
     let res: Option<String> = kv.get(KEY_NAME).expect("cannot retrieve value");
     println!("{:?}", res);
     assert_eq!(Some(value), res);
+}
+
+#[test]
+fn test_multiple_thread() {
+    let mut dir = env::temp_dir();
+    dir.push("microkv");
+
+    let kv: MicroKV = MicroKV::open_with_base_path("test_multiple_thread", dir)
+        .expect("Failed to create MicroKV from a stored file or create MicroKV for this file")
+        .set_auto_commit(true)
+        .with_pwd_clear(TEST_PASSWORD.to_string());
+
+    let mut threads = Vec::new();
+    for ix in 0..1000 {
+        let microkv = kv.clone();
+        let key = format!("key-thread-{}", ix);
+        let value = format!("value-thread-{}", ix);
+
+        let thread = thread::spawn(move || {
+            microkv
+                .put(key, &value)
+                .expect("failed to put data to MicroKV");
+        });
+        threads.push(thread);
+    }
+
+    for thread in threads {
+        thread.join().unwrap();
+    }
 }
