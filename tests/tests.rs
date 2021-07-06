@@ -4,7 +4,6 @@
 //! - simple database interactions
 //! - concurrent database interactions
 
-use std::sync::Arc;
 use std::{env, thread};
 
 use serde::{Deserialize, Serialize};
