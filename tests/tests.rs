@@ -120,4 +120,12 @@ fn test_multiple_thread() {
     for thread in threads {
         thread.join().unwrap();
     }
+    for ix in 0..1000 {
+        let except_key = format!("key-thread-{}", ix);
+        let except_value = format!("value-thread-{}", ix);
+        let real_value: String = kv
+            .get_unwrap(except_key)
+            .expect("failed to get value from MicroKV");
+        assert_eq!(real_value, except_value);
+    }
 }
