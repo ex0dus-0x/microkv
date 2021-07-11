@@ -55,7 +55,7 @@ type KV = IndexMap<String, SecVec<u8>>;
 
 /// Defines the main interface structure to represent the most
 /// recent state of the data store.
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct MicroKV {
     path: PathBuf,
 
