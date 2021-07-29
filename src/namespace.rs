@@ -40,7 +40,7 @@ impl<'a> NamespaceMicrokv<'a> {
     /// unsafe get, may this api can change name to get_unwrap
     pub fn get_unwrap<V>(&self, key: impl AsRef<str>) -> Result<V>
     where
-        V: DeserializeOwned + 'static,
+        V: Serialize + DeserializeOwned + 'static,
     {
         if let Some(v) = self.get(key)? {
             return Ok(v);
@@ -55,7 +55,7 @@ impl<'a> NamespaceMicrokv<'a> {
     /// ciphertext decryption doesn't work, and if parsing bytes fail.
     pub fn get<V>(&self, key: impl AsRef<str>) -> Result<Option<V>>
     where
-        V: DeserializeOwned + 'static,
+        V: Serialize + DeserializeOwned + 'static,
     {
         let data_key = self.key(key);
         let lock = self.microkv.storage().read().map_err(|_| KVError {

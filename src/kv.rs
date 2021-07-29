@@ -246,7 +246,7 @@ impl MicroKV {
     /// unsafe get, may this api can change name to get_unwrap
     pub fn get_unwrap<V>(&self, key: impl AsRef<str>) -> Result<V>
     where
-        V: DeserializeOwned + 'static,
+        V: Serialize + DeserializeOwned + 'static,
     {
         self.namespace_default().get_unwrap(key)
     }
@@ -255,7 +255,7 @@ impl MicroKV {
     /// ciphertext decryption doesn't work, and if parsing bytes fail.
     pub fn get<V>(&self, key: impl AsRef<str>) -> Result<Option<V>>
     where
-        V: DeserializeOwned + 'static,
+        V: Serialize + DeserializeOwned + 'static,
     {
         self.namespace_default().get(key)
     }
