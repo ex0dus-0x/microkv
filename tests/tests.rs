@@ -129,3 +129,47 @@ fn test_multiple_thread() {
         assert_eq!(real_value, except_value);
     }
 }
+
+#[test]
+fn test_namespace_with_base_path_and_store() {
+    let mut dir = env::temp_dir();
+    dir.push("microkv");
+
+    let kv = MicroKV::open_with_base_path("test_namespace_with_base_path_and_store", dir)
+        .expect("Failed to create MicroKV from a stored file or create MicroKV for this file")
+        .set_auto_commit(true)
+        .with_pwd_clear(TEST_PASSWORD.to_string());
+    let namespace_default = kv.namespace_default();
+    let namespace_one = kv.namespace("one");
+
+    kv.put("foo", &"bar".to_string()).unwrap();
+    namespace_default.put("egg", &"gge".to_string()).unwrap();
+
+    namespace_one.put("zoo", &"big".to_string()).unwrap();
+
+    assert_eq!(
+        Some("bar".to_string()),
+        namespace_default.get("foo").unwrap(),
+    );
+    assert_eq!(Some("gge".to_string()), kv.get("egg").unwrap());
+    let zoo_nsg_def: Option<String> = namespace_default.get("zoo").unwrap();
+    assert_eq!(None, zoo_nsg_def);
+
+    let foo_ns_one: Option<String> = namespace_one.get("foo").unwrap();
+    let egg_ns_one: Option<String> = namespace_one.get("egg").unwrap();
+    assert_eq!(None, foo_ns_one);
+    assert_eq!(None, egg_ns_one);
+    assert_eq!(Some("big".to_string()), namespace_one.get("zoo").unwrap());
+
+    let keys_df0 = kv.keys().unwrap();
+    let keys_df1 = namespace_default.keys().unwrap();
+    assert_eq!(keys_df0, keys_df1);
+    let keys_ns_one = namespace_one.keys().unwrap();
+    assert_ne!(keys_df0, keys_ns_one);
+
+    assert!(keys_df0.contains(&"foo".to_string()));
+    assert!(keys_df0.contains(&"egg".to_string()));
+    assert!(keys_df1.contains(&"foo".to_string()));
+    assert!(keys_df1.contains(&"egg".to_string()));
+    assert_eq!(keys_ns_one, vec!["one@zoo"]);
+}
