@@ -81,16 +81,22 @@ struct Identity {
 fn main() {
     let unsafe_pwd: String = "my_password_123";
 
-    // initialize database with (unsafe) cleartext password
+    // initialize in-memory database with (unsafe) cleartext password
     let db: MicroKV = MicroKV::new("my_db")
-        .with_password_clear(unsafe_pwd);
+        .with_pwd_clear(unsafe_pwd);
 
-    // simple interaction
+    // ... or backed by disk, with auto-commit per transaction
+    let db: MicroKV = MicroKV::open_with_base_path("my_db_on_disk", SOME_PATH)
+        .expect("Failed to create MicroKV from a stored file or create MicroKV for this file")
+        .set_auto_commit(true)
+        .with_pwd_clear(unsafe_pwd);
+
+    // simple interaction to default namespace
     db.put("simple", 1);
     print("{}", db.get_unwrap("simple").unwrap());
     db.delete("simple");
 
-    // more complex interaction
+    // more complex interaction to default namespace
     let identity = Identity {
         uuid: 123,
         name: String::from("Alice"),
@@ -101,6 +107,14 @@ fn main() {
     println!("{:?}", stored_identity);
     db.delete("complex");
 }
+```
+
+__microkv__ also supports transactions on other namespaces to support grouping and
+organizing keys (thanks @fewensa!):
+
+```rust
+    let namespace_one = db.namespace("one");
+    namespace_one.put("zoo", &"big".to_string()).unwrap();
 ```
 
 __microkv__ also includes a [simple command line application](https://github.com/ex0dus-0x/microkv/tree/master/cli)

@@ -135,7 +135,7 @@ impl<'a> NamespaceMicrokv<'a> {
         let value: SecVec<u8> = match self.microkv.pwd() {
             // encrypt using AEAD and secure memory
             Some(pwd) => {
-                let key: Key = Key::from_slice(&pwd.unsecure()).unwrap();
+                let key: Key = Key::from_slice(pwd.unsecure()).unwrap();
                 SecVec::new(secretbox::seal(&ser_val, self.microkv.nonce(), &key))
             }
 
