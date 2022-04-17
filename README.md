@@ -17,17 +17,11 @@ Minimal and persistent key-value store designed with security in mind.
 
 ## Introduction
 
-__microkv__ is a persistent key-value store implemented in Rust, aiming to maintain a balance between security and performance. It is built out of a yearning to learn more about the intricacies of distributed systems, databases, and secure persistent storage.
+__microkv__ is a minimal and persistent key-value store designed with security in mind, built to prioritize secure storage for client-side application. I created this project out of a yearning to learn more about the intricacies of distributed systems, databases, and secure persistent storage.
 
 While __microkv__ shouldn't be used in large-scale environments that facilitate an insane volume of transactional interactions,
 it is still optimal for use in a production-grade system/application that may not require the complex luxuries of a
 full-blown database or even industry-standard KV-store like Redis or LevelDB.
-
-### Example Use Cases
-
-* Local persistent serialization for sensitive configurations
-* Secrets management for a single-process application
-* License key management
 
 ## Features
 
@@ -46,11 +40,6 @@ __microkv__ also provides locking support with `RwLock`s, which utilize mutual e
 * __Small__
 
 At its core, __microkv__ is implemented in ~500 LOCs, making the implementation portable and auditable. It remains faithfully opinionated, meaning it will not offer extensions to other serializable formats, or any other user-involved configurability, allowing it to work right out of the box.
-
-## Design
-
-* [Internal Design](https://github.com/ex0dus-0x/microkv/wiki)
-* [Threat Model](https://github.com/ex0dus-0x/microkv/wiki/Threat-Model)
 
 ## Usage
 

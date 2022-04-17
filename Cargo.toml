@@ -3,7 +3,7 @@ name = "microkv"
 description = "a minimal and persistent key-value store designed with security in mind."
 version = "0.2.8"
 
-authors = ["ex0dus-0x <ex0dus at codemuch.tech>"]
+authors = ["ex0dus-0x"]
 license = "MIT"
 
 homepage = "https://github.com/ex0dus-0x/microkv"
