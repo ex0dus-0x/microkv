@@ -1,3 +1,4 @@
+use indexmap::IndexMap;
 use secstr::SecVec;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -15,23 +16,19 @@ pub struct NamespaceMicrokv<'a> {
     microkv: &'a MicroKV,
 }
 
+fn format_key(namespace: &str, key: impl AsRef<str>) -> String {
+    if namespace.is_empty() {
+        key.as_ref().to_string()
+    } else {
+        format!("{}@{}", namespace, key.as_ref())
+    }
+}
+
 impl<'a> NamespaceMicrokv<'a> {
     pub fn new(namespace: impl AsRef<str>, microkv: &'a MicroKV) -> Self {
         Self {
             namespace: namespace.as_ref().to_string(),
             microkv,
-        }
-    }
-
-    fn namespace_prefix(&self) -> String {
-        format!("{}@", self.namespace)
-    }
-
-    fn key(&self, key: impl AsRef<str>) -> String {
-        if self.namespace.is_empty() {
-            key.as_ref().to_string()
-        } else {
-            format!("{}{}", &self.namespace_prefix(), key.as_ref())
         }
     }
 }
@@ -57,7 +54,6 @@ impl<'a> NamespaceMicrokv<'a> {
     where
         V: DeserializeOwned + 'static,
     {
-        let data_key = self.key(key);
         let lock = self.microkv.storage().read().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
@@ -65,51 +61,7 @@ impl<'a> NamespaceMicrokv<'a> {
 
         // initialize a copy of state
         let data = lock.clone();
-
-        // retrieve value from IndexMap if stored, decrypt and return
-        match data.get(&data_key) {
-            Some(val) => {
-                // get value to deserialize. If password is set, retrieve the value, and decrypt it
-                // using AEAD. Otherwise just get the value and return
-                let deser_val = match &self.microkv.pwd() {
-                    Some(pwd) => {
-                        // initialize key from pwd slice
-                        let key = match Key::from_slice(pwd.unsecure()) {
-                            Some(k) => k,
-                            None => {
-                                return Err(KVError {
-                                    error: ErrorType::CryptoError,
-                                    msg: Some("cannot derive key from password hash".to_string()),
-                                });
-                            }
-                        };
-
-                        // borrow secured value by reference, and decrypt before deserializing
-                        match secretbox::open(val.unsecure(), self.microkv.nonce(), &key) {
-                            Ok(r) => r,
-                            Err(_) => {
-                                return Err(KVError {
-                                    error: ErrorType::CryptoError,
-                                    msg: Some("cannot validate value being decrypted".to_string()),
-                                });
-                            }
-                        }
-                    }
-
-                    // if no password, return value as-is
-                    None => val.unsecure().to_vec(),
-                };
-
-                // finally deserialize into deserializable object to return as
-                let value: V = bincode::deserialize(&deser_val).map_err(|_| KVError {
-                    error: ErrorType::KVError,
-                    msg: Some("cannot deserialize into specified object type".to_string()),
-                })?;
-                Ok(Some(value))
-            }
-
-            None => Ok(None),
-        }
+        data.kv_get(self.microkv, &self.namespace, key)
     }
 
     /// Encrypts and adds a new key-value pair to storage.
@@ -117,32 +69,12 @@ impl<'a> NamespaceMicrokv<'a> {
     where
         V: Serialize,
     {
-        let data_key = self.key(key);
         let mut data = self.microkv.storage().write().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
         })?;
 
-        // to retain best-case constant runtime, we remove the key-value if found
-        if data.contains_key(&data_key) {
-            let _ = data.remove(&data_key).unwrap();
-        }
-
-        // serialize the object for committing to db
-        let ser_val: Vec<u8> = bincode::serialize(&value).unwrap();
-
-        // encrypt and secure value if password is available
-        let value: SecVec<u8> = match self.microkv.pwd() {
-            // encrypt using AEAD and secure memory
-            Some(pwd) => {
-                let key: Key = Key::from_slice(pwd.unsecure()).unwrap();
-                SecVec::new(secretbox::seal(&ser_val, self.microkv.nonce(), &key))
-            }
-
-            // otherwise initialize secure serialized object to insert to BTreeMap
-            None => SecVec::new(ser_val),
-        };
-        data.insert(data_key, value);
+        data.kv_put(self.microkv, &self.namespace, key, value);
 
         if !self.microkv.is_auto_commit() {
             return Ok(());
@@ -153,7 +85,7 @@ impl<'a> NamespaceMicrokv<'a> {
 
     /// Delete removes an entry in the key value store.
     pub fn delete(&self, key: impl AsRef<str>) -> Result<()> {
-        let data_key = self.key(key);
+        let data_key = format_key(&self.namespace, key);
         let mut data = self.microkv.storage().write().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
@@ -171,7 +103,7 @@ impl<'a> NamespaceMicrokv<'a> {
 
     /// Helper routine that acquires a reader lock and checks if a key exists.
     pub fn exists(&self, key: impl AsRef<str>) -> Result<bool> {
-        let data_key = self.key(key);
+        let data_key = format_key(&self.namespace, key);
         let data = self.microkv.storage().read().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
@@ -198,7 +130,7 @@ impl<'a> NamespaceMicrokv<'a> {
                 if self.namespace.is_empty() {
                     return true;
                 }
-                x.starts_with(&self.namespace_prefix())
+                x.starts_with(&format_key(&self.namespace, ""))
             })
             .map(|x| x.to_string())
             .collect::<Vec<String>>();
@@ -225,7 +157,7 @@ impl<'a> NamespaceMicrokv<'a> {
                 if self.namespace.is_empty() {
                     return true;
                 }
-                x.starts_with(&self.namespace_prefix())
+                x.starts_with(&format_key(&self.namespace, ""))
             })
             .map(|x| x.to_string())
             .collect::<Vec<String>>();
@@ -247,7 +179,7 @@ impl<'a> NamespaceMicrokv<'a> {
                 if self.namespace.is_empty() {
                     return true;
                 }
-                key.starts_with(&self.namespace_prefix())
+                key.starts_with(&format_key(&self.namespace, ""))
             })
             .for_each(|(_, value)| value.zero_out());
 
@@ -255,7 +187,7 @@ impl<'a> NamespaceMicrokv<'a> {
         if self.namespace.is_empty() {
             data.clear();
         } else {
-            data.retain(|key, _| !key.starts_with(&self.namespace_prefix()));
+            data.retain(|key, _| !key.starts_with(&format_key(&self.namespace, "")));
         }
 
         // auto commit
@@ -263,5 +195,91 @@ impl<'a> NamespaceMicrokv<'a> {
             return Ok(());
         }
         self.microkv.commit()
+    }
+}
+
+pub trait ExtendedIndexMap {
+    /// An extended version of put that takes the key and the namespace and serializes it
+    fn kv_put<V>(&mut self, microkv: &MicroKV, namespace: impl AsRef<str>, key: impl AsRef<str>, value: &V) where V: Serialize;
+
+    /// An extended version of get that takes the key and the namespace and properly deserializes the value
+    fn kv_get<V>(&self, microkv: &MicroKV, namespace: impl AsRef<str>, key: impl AsRef<str>) -> Result<Option<V>> where V: DeserializeOwned + 'static;
+}
+
+impl ExtendedIndexMap for IndexMap<String, SecVec<u8>> {
+    fn kv_put<V>(&mut self, microkv: &MicroKV, namespace: impl AsRef<str>, key: impl AsRef<str>, value: &V) where V: Serialize {
+        let data_key = format_key(namespace.as_ref(), key);
+
+        // to retain best-case constant runtime, we remove the key-value if found
+        if self.contains_key(&data_key) {
+            let _ = self.remove(&data_key).unwrap();
+        }
+
+        // serialize the object for committing to db
+        let ser_val: Vec<u8> = bincode::serialize(&value).unwrap();
+
+        // encrypt and secure value if password is available
+        let value: SecVec<u8> = match microkv.pwd() {
+            // encrypt using AEAD and secure memory
+            Some(pwd) => {
+                let key: Key = Key::from_slice(pwd.unsecure()).unwrap();
+                SecVec::new(secretbox::seal(&ser_val, microkv.nonce(), &key))
+            }
+
+            // otherwise initialize secure serialized object to insert to BTreeMap
+            None => SecVec::new(ser_val),
+        };
+
+        self.insert(data_key, value);
+    }
+
+    fn kv_get<V>(&self, microkv: &MicroKV, namespace: impl AsRef<str>, key: impl AsRef<str>) -> Result<Option<V>> where V: DeserializeOwned + 'static {
+        let data_key = format_key(namespace.as_ref(), key);
+
+        // retrieve value from IndexMap if stored, decrypt and return
+        match self.get(&data_key) {
+            Some(val) => {
+                // get value to deserialize. If password is set, retrieve the value, and decrypt it
+                // using AEAD. Otherwise just get the value and return
+                let deser_val = match &microkv.pwd() {
+                    Some(pwd) => {
+                        // initialize key from pwd slice
+                        let key = match Key::from_slice(pwd.unsecure()) {
+                            Some(k) => k,
+                            None => {
+                                return Err(KVError {
+                                    error: ErrorType::CryptoError,
+                                    msg: Some("cannot derive key from password hash".to_string()),
+                                });
+                            }
+                        };
+
+                        // borrow secured value by reference, and decrypt before deserializing
+                        match secretbox::open(val.unsecure(), microkv.nonce(), &key) {
+                            Ok(r) => r,
+                            Err(_) => {
+                                return Err(KVError {
+                                    error: ErrorType::CryptoError,
+                                    msg: Some("cannot validate value being decrypted".to_string()),
+                                });
+                            }
+                        }
+                    }
+
+                    // if no password, return value as-is
+                    None => val.unsecure().to_vec(),
+                };
+
+                // finally deserialize into deserializable object to return as
+                let value: V = bincode::deserialize(&deser_val).map_err(|_| KVError {
+                    error: ErrorType::KVError,
+                    msg: Some("cannot deserialize into specified object type".to_string()),
+                })?;
+                Ok(Some(value))
+            }
+
+            None => Ok(None),
+        }
+
     }
 }
