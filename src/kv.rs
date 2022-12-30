@@ -271,6 +271,21 @@ impl MicroKV {
 
     /// Arbitrary read-lock that encapsulates a read-only closure. Multiple concurrent readers
     /// can hold a lock and parse out data.
+    /// ```rust
+    /// use microkv::MicroKV;
+    /// use microkv::namespace::ExtendedIndexMap;
+    ///
+    /// let kv = MicroKV::new("example").with_pwd_clear("p@ssw0rd".to_string());
+    /// let value = String::from("my value");
+    /// kv.namespace("a").put("user", &value).expect("cannot insert user");
+    /// kv.namespace("b").put("user", &value).expect("cannot insert user");
+    ///
+    /// kv.lock_read(|c| {
+    ///     let user_namespace_1: String = c.kv_get(&kv, "a", "user").expect("cannot read user").expect("key not found");
+    ///     let user_namespace_2: String = c.kv_get(&kv, "b", "user").expect("cannot read user").expect("key not found");
+    ///     assert_eq!(user_namespace_1, user_namespace_2);
+    /// }).expect("cannot get lock")
+    /// ```
     pub fn lock_read<C, R>(&self, callback: C) -> Result<R>
     where
         C: Fn(&KV) -> R,
@@ -284,6 +299,22 @@ impl MicroKV {
 
     /// Arbitrary write-lock that encapsulates a write-only closure Single writer can hold a
     /// lock and mutate data, blocking any other readers/writers before the lock is released.
+    /// ```rust
+    /// use microkv::MicroKV;
+    /// use microkv::namespace::ExtendedIndexMap;
+    ///
+    /// let kv = MicroKV::new("example").with_pwd_clear("p@ssw0rd".to_string());
+    /// let value: u32 = 123;
+    /// kv.put("number", &value).expect("cannot insert number");
+    ///
+    /// kv.lock_write(|c| {
+    ///     let current_value: u32 = c.kv_get(&kv, "", "number").expect("cannot read number").expect("key not found");
+    ///     println!("Current value is: {current_value}");
+    ///     c.kv_put(&kv, "", "number", &(current_value + 1));
+    ///     let current_value: u32 = c.kv_get(&kv, "", "number").expect("cannot read number").expect("key not found");
+    ///     println!("Now the value is: {current_value}");
+    /// }).expect("cannot get lock")
+    /// ```    
     pub fn lock_write<C, R>(&self, mut callback: C) -> Result<R>
     where
         C: FnMut(&mut KV) -> R,
