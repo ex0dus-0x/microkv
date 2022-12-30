@@ -78,14 +78,21 @@ fn test_base_path_with_auto_commit() {
     let mut dir = env::temp_dir();
     dir.push("microkv");
 
-    let kv: MicroKV = MicroKV::open_with_base_path("test_base_path_with_auto_commit", dir)
-        .expect("Failed to create MicroKV from a stored file or create MicroKV for this file")
-        .set_auto_commit(true)
-        .with_pwd_clear(TEST_PASSWORD.to_string());
+    let kv: MicroKV =
+        MicroKV::open_with_base_path("test_base_path_with_auto_commit", dir.to_path_buf())
+            .expect("Failed to create MicroKV from a stored file or create MicroKV for this file")
+            .set_auto_commit(true)
+            .with_pwd_clear(TEST_PASSWORD.to_string());
 
     // insert String value
     let value: String = String::from("my value");
     kv.put(KEY_NAME, &value).expect("cannot insert value");
+
+    // create a new kv so that it is loaded from the directory
+    let kv: MicroKV = MicroKV::open_with_base_path("test_base_path_with_auto_commit", dir)
+        .expect("Failed to create MicroKV from a stored file or create MicroKV for this file")
+        .set_auto_commit(true)
+        .with_pwd_clear(TEST_PASSWORD.to_string());
 
     // get key and validate
     let res: Option<String> = kv.get(KEY_NAME).expect("cannot retrieve value");

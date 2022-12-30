@@ -187,8 +187,8 @@ impl MicroKV {
     /// the defaultly supported SHA-256 by `sodiumoxide`, in order to instantiate a 32-byte hash.
     ///
     /// Use if the password to encrypt is not naturally pseudorandom and secured in-memory,
-    /// and is instead read elsewhere, like a file or stdin (developer should guarentee security when
-    /// implementing such methods, as MicroKV only guarentees hashing and secure storage).
+    /// and is instead read elsewhere, like a file or stdin (developer should guarantee security when
+    /// implementing such methods, as MicroKV only guarantees hashing and secure storage).
     pub fn with_pwd_clear<S: AsRef<str>>(mut self, unsafe_pwd: S) -> Self {
         let pwd: SecStr = SecVec::new(sha256::hash(unsafe_pwd.as_ref().as_bytes()).0.to_vec());
         self.pwd = Some(pwd);
@@ -214,14 +214,6 @@ impl MicroKV {
     ///////////////////////////////////////
     // extended
     ///////////////////////////////////////
-
-    pub(crate) fn storage(&self) -> &Arc<RwLock<KV>> {
-        &self.storage
-    }
-
-    pub(crate) fn is_auto_commit(&self) -> bool {
-        self.is_auto_commit
-    }
 
     pub(crate) fn pwd(&self) -> &Option<SecStr> {
         &self.pwd
@@ -294,13 +286,21 @@ impl MicroKV {
     /// lock and mutate data, blocking any other readers/writers before the lock is released.
     pub fn lock_write<C, R>(&self, mut callback: C) -> Result<R>
     where
-        C: FnMut(&KV) -> R,
+        C: FnMut(&mut KV) -> R,
     {
         let mut data = self.storage.write().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
         })?;
-        Ok(callback(&mut data))
+
+        let result = callback(&mut data);
+        drop(data);
+
+        if self.is_auto_commit {
+            self.commit()?;
+        }
+
+        Ok(result)
     }
 
     /// Helper routine that acquires a reader lock and checks if a key exists.
@@ -312,7 +312,7 @@ impl MicroKV {
     /// `Vec<String>` for further use.
     ///
     /// Note that key iteration, not value iteration, is only supported in order to preserve
-    /// security guarentees.
+    /// security guarantees.
     pub fn keys(&self) -> Result<Vec<String>> {
         self.namespace_default().keys()
     }
@@ -321,7 +321,7 @@ impl MicroKV {
     /// `IndexMap` and returns a `Vec<String>` for further use.
     ///
     /// Note that key iteration, not value iteration, is only supported in order to preserve
-    /// security guarentees.
+    /// security guarantees.
     pub fn sorted_keys(&self) -> Result<Vec<String>> {
         self.namespace_default().sorted_keys()
     }
