@@ -187,8 +187,8 @@ impl MicroKV {
     /// the defaultly supported SHA-256 by `sodiumoxide`, in order to instantiate a 32-byte hash.
     ///
     /// Use if the password to encrypt is not naturally pseudorandom and secured in-memory,
-    /// and is instead read elsewhere, like a file or stdin (developer should guarentee security when
-    /// implementing such methods, as MicroKV only guarentees hashing and secure storage).
+    /// and is instead read elsewhere, like a file or stdin (developer should guarantee security when
+    /// implementing such methods, as MicroKV only guarantees hashing and secure storage).
     pub fn with_pwd_clear<S: AsRef<str>>(mut self, unsafe_pwd: S) -> Self {
         let pwd: SecStr = SecVec::new(sha256::hash(unsafe_pwd.as_ref().as_bytes()).0.to_vec());
         self.pwd = Some(pwd);
@@ -214,14 +214,6 @@ impl MicroKV {
     ///////////////////////////////////////
     // extended
     ///////////////////////////////////////
-
-    pub(crate) fn storage(&self) -> &Arc<RwLock<KV>> {
-        &self.storage
-    }
-
-    pub(crate) fn is_auto_commit(&self) -> bool {
-        self.is_auto_commit
-    }
 
     pub(crate) fn pwd(&self) -> &Option<SecStr> {
         &self.pwd
@@ -279,9 +271,24 @@ impl MicroKV {
 
     /// Arbitrary read-lock that encapsulates a read-only closure. Multiple concurrent readers
     /// can hold a lock and parse out data.
+    /// ```rust
+    /// use microkv::MicroKV;
+    /// use microkv::namespace::ExtendedIndexMap;
+    ///
+    /// let kv = MicroKV::new("example").with_pwd_clear("p@ssw0rd".to_string());
+    /// let value = String::from("my value");
+    /// kv.namespace("a").put("user", &value).expect("cannot insert user");
+    /// kv.namespace("b").put("user", &value).expect("cannot insert user");
+    ///
+    /// kv.lock_read(|c| {
+    ///     let user_namespace_1: String = c.kv_get(&kv, "a", "user").expect("cannot read user").expect("key not found");
+    ///     let user_namespace_2: String = c.kv_get(&kv, "b", "user").expect("cannot read user").expect("key not found");
+    ///     assert_eq!(user_namespace_1, user_namespace_2);
+    /// }).expect("cannot get lock")
+    /// ```
     pub fn lock_read<C, R>(&self, callback: C) -> Result<R>
     where
-        C: Fn(&KV) -> R,
+        C: FnOnce(&KV) -> R,
     {
         let data = self.storage.read().map_err(|_| KVError {
             error: ErrorType::PoisonError,
@@ -292,15 +299,39 @@ impl MicroKV {
 
     /// Arbitrary write-lock that encapsulates a write-only closure Single writer can hold a
     /// lock and mutate data, blocking any other readers/writers before the lock is released.
-    pub fn lock_write<C, R>(&self, mut callback: C) -> Result<R>
+    /// ```rust
+    /// use microkv::MicroKV;
+    /// use microkv::namespace::ExtendedIndexMap;
+    ///
+    /// let kv = MicroKV::new("example").with_pwd_clear("p@ssw0rd".to_string());
+    /// let value: u32 = 123;
+    /// kv.put("number", &value).expect("cannot insert number");
+    ///
+    /// kv.lock_write(|c| {
+    ///     let current_value: u32 = c.kv_get_unwrap(&kv, "", "number").expect("cannot read number");
+    ///     println!("Current value is: {current_value}");
+    ///     c.kv_put(&kv, "", "number", &(current_value + 1));
+    ///     let current_value: u32 = c.kv_get_unwrap(&kv, "", "number").expect("cannot read number");
+    ///     println!("Now the value is: {current_value}");
+    /// }).expect("cannot get lock")
+    /// ```    
+    pub fn lock_write<C, R>(&self, callback: C) -> Result<R>
     where
-        C: FnMut(&KV) -> R,
+        C: FnOnce(&mut KV) -> R,
     {
         let mut data = self.storage.write().map_err(|_| KVError {
             error: ErrorType::PoisonError,
             msg: None,
         })?;
-        Ok(callback(&mut data))
+
+        let result = callback(&mut data);
+        drop(data);
+
+        if self.is_auto_commit {
+            self.commit()?;
+        }
+
+        Ok(result)
     }
 
     /// Helper routine that acquires a reader lock and checks if a key exists.
@@ -312,7 +343,7 @@ impl MicroKV {
     /// `Vec<String>` for further use.
     ///
     /// Note that key iteration, not value iteration, is only supported in order to preserve
-    /// security guarentees.
+    /// security guarantees.
     pub fn keys(&self) -> Result<Vec<String>> {
         self.namespace_default().keys()
     }
@@ -321,7 +352,7 @@ impl MicroKV {
     /// `IndexMap` and returns a `Vec<String>` for further use.
     ///
     /// Note that key iteration, not value iteration, is only supported in order to preserve
-    /// security guarentees.
+    /// security guarantees.
     pub fn sorted_keys(&self) -> Result<Vec<String>> {
         self.namespace_default().sorted_keys()
     }
