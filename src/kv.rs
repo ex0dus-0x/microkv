@@ -308,10 +308,10 @@ impl MicroKV {
     /// kv.put("number", &value).expect("cannot insert number");
     ///
     /// kv.lock_write(|c| {
-    ///     let current_value: u32 = c.kv_get(&kv, "", "number").expect("cannot read number").expect("key not found");
+    ///     let current_value: u32 = c.kv_get_unwrap(&kv, "", "number").expect("cannot read number");
     ///     println!("Current value is: {current_value}");
     ///     c.kv_put(&kv, "", "number", &(current_value + 1));
-    ///     let current_value: u32 = c.kv_get(&kv, "", "number").expect("cannot read number").expect("key not found");
+    ///     let current_value: u32 = c.kv_get_unwrap(&kv, "", "number").expect("cannot read number");
     ///     println!("Now the value is: {current_value}");
     /// }).expect("cannot get lock")
     /// ```    

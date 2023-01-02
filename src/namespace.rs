@@ -40,13 +40,8 @@ impl<'a> NamespaceMicrokv<'a> {
     where
         V: DeserializeOwned + 'static,
     {
-        if let Some(v) = self.get(key)? {
-            return Ok(v);
-        }
-        Err(KVError {
-            error: ErrorType::KVError,
-            msg: Some("key not found in storage".to_string()),
-        })
+        self.microkv
+            .lock_read(|c| c.kv_get_unwrap(self.microkv, &self.namespace, &key))?
     }
 
     /// Decrypts and retrieves a value. Can return errors if lock is poisoned,
@@ -161,6 +156,17 @@ pub trait ExtendedIndexMap {
     where
         V: DeserializeOwned + 'static;
 
+    /// An extended version of get that takes the key and the namespace and properly deserializes the value
+    /// In case the key is not present, it will return a KVError
+    fn kv_get_unwrap<V>(
+        &self,
+        microkv: &MicroKV,
+        namespace: impl AsRef<str>,
+        key: impl AsRef<str>,
+    ) -> Result<V>
+    where
+        V: DeserializeOwned + 'static;
+
     /// An extended version of put that takes the key and the namespace and serializes it
     fn kv_put<V>(
         &mut self,
@@ -196,6 +202,24 @@ impl ExtendedIndexMap for IndexMap<String, SecVec<u8>> {
 
         // retrieve value from IndexMap if stored, decrypt and return
         parse_value(microkv, self.get(&data_key))
+    }
+
+    fn kv_get_unwrap<V>(
+        &self,
+        microkv: &MicroKV,
+        namespace: impl AsRef<str>,
+        key: impl AsRef<str>,
+    ) -> Result<V>
+    where
+        V: DeserializeOwned + 'static,
+    {
+        if let Some(v) = self.kv_get(microkv, namespace, key)? {
+            return Ok(v);
+        }
+        Err(KVError {
+            error: ErrorType::KVError,
+            msg: Some("key not found in storage".to_string()),
+        })
     }
 
     fn kv_put<V>(
