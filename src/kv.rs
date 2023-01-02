@@ -288,7 +288,7 @@ impl MicroKV {
     /// ```
     pub fn lock_read<C, R>(&self, callback: C) -> Result<R>
     where
-        C: Fn(&KV) -> R,
+        C: FnOnce(&KV) -> R,
     {
         let data = self.storage.read().map_err(|_| KVError {
             error: ErrorType::PoisonError,
@@ -315,9 +315,9 @@ impl MicroKV {
     ///     println!("Now the value is: {current_value}");
     /// }).expect("cannot get lock")
     /// ```    
-    pub fn lock_write<C, R>(&self, mut callback: C) -> Result<R>
+    pub fn lock_write<C, R>(&self, callback: C) -> Result<R>
     where
-        C: FnMut(&mut KV) -> R,
+        C: FnOnce(&mut KV) -> R,
     {
         let mut data = self.storage.write().map_err(|_| KVError {
             error: ErrorType::PoisonError,
