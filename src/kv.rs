@@ -71,7 +71,7 @@ const DEFAULT_WORKSPACE_PATH: &str = ".microkv/";
 /// An alias to a base data structure that supports storing
 /// associated types. An `IndexMap` is a strong choice due to
 /// strong asymptotic performance with sorted key iteration.
-type KV = IndexMap<String, SecVec<u8>>;
+pub type KV = IndexMap<String, SecVec<u8>>;
 
 /// Defines the main interface structure to represent the most
 /// recent state of the data store.
