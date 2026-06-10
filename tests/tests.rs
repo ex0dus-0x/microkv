@@ -45,7 +45,10 @@ fn basic_crud() {
     assert!(!db.contains("n").unwrap());
     assert!(matches!(db.require::<u64>("n"), Err(Error::NotFound)));
 
-    let user = User { id: 7, name: "bob".into() };
+    let user = User {
+        id: 7,
+        name: "bob".into(),
+    };
     db.put("u", &user).unwrap();
     assert_eq!(db.require::<User>("u").unwrap(), user);
 }
@@ -77,8 +80,12 @@ fn atomic_update_and_cas() {
     assert_eq!(db.require::<u32>("counter").unwrap(), 5);
 
     // CAS succeeds on match, fails on mismatch
-    assert!(db.compare_and_swap("counter", Some(&5u32), Some(&10u32)).unwrap());
-    assert!(!db.compare_and_swap("counter", Some(&5u32), Some(&99u32)).unwrap());
+    assert!(db
+        .compare_and_swap("counter", Some(&5u32), Some(&10u32))
+        .unwrap());
+    assert!(!db
+        .compare_and_swap("counter", Some(&5u32), Some(&99u32))
+        .unwrap());
     assert_eq!(db.require::<u32>("counter").unwrap(), 10);
 
     // get_or_insert_with
@@ -175,9 +182,12 @@ fn tampered_value_is_rejected() {
     std::fs::write(&path, &bytes).unwrap();
 
     // tampering must be rejected — either as Corrupt (at open) or Crypto (at get).
-    let result = MicroKV::open(&path, Credential::password(PASSWORD))
-        .and_then(|db| db.get::<String>("k"));
-    assert!(result.is_err(), "tampering must be rejected, got {result:?}");
+    let result =
+        MicroKV::open(&path, Credential::password(PASSWORD)).and_then(|db| db.get::<String>("k"));
+    assert!(
+        result.is_err(),
+        "tampering must be rejected, got {result:?}"
+    );
 
     let _ = std::fs::remove_file(&path);
 }
@@ -245,7 +255,9 @@ fn persistence_round_trip() {
         .autosave(AutoSave::OnEveryWrite)
         .open(Credential::password(PASSWORD))
         .unwrap();
-    db.namespace("settings").put("theme", &"dark".to_string()).unwrap();
+    db.namespace("settings")
+        .put("theme", &"dark".to_string())
+        .unwrap();
     db.put("count", &3u32).unwrap();
     drop(db);
 
@@ -276,7 +288,8 @@ fn change_password_then_reopen() {
         Err(Error::WrongPassword)
     ));
 
-    db.change_password(PASSWORD.into(), "new-pass".into()).unwrap();
+    db.change_password(PASSWORD.into(), "new-pass".into())
+        .unwrap();
     drop(db);
 
     // old password no longer opens it; new one does
@@ -300,7 +313,10 @@ fn keys_prefix_and_for_each() {
 
     let mut users = db.prefix::<u32>("user:").unwrap();
     users.sort_by(|a, b| a.0.cmp(&b.0));
-    assert_eq!(users, vec![("user:1".to_string(), 1), ("user:2".to_string(), 2)]);
+    assert_eq!(
+        users,
+        vec![("user:1".to_string(), 1), ("user:2".to_string(), 2)]
+    );
 
     let mut sum = 0u32;
     db.for_each::<u32, _>(|_, v| {

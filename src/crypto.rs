@@ -100,7 +100,13 @@ pub(crate) fn aead_encrypt(
     let mut nonce_bytes = [0u8; 12];
     getrandom::getrandom(&mut nonce_bytes).map_err(|_| Error::Random)?;
     let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce_bytes), Payload { msg: plaintext, aad })
+        .encrypt(
+            Nonce::from_slice(&nonce_bytes),
+            Payload {
+                msg: plaintext,
+                aad,
+            },
+        )
         .map_err(|_| Error::Crypto)?;
     Ok((nonce_bytes, ciphertext))
 }
@@ -113,7 +119,13 @@ pub(crate) fn aead_decrypt(
     ciphertext: &[u8],
 ) -> Result<Vec<u8>> {
     cipher
-        .decrypt(Nonce::from_slice(nonce), Payload { msg: ciphertext, aad })
+        .decrypt(
+            Nonce::from_slice(nonce),
+            Payload {
+                msg: ciphertext,
+                aad,
+            },
+        )
         .map_err(|_| Error::Crypto)
 }
 

@@ -16,9 +16,7 @@ use crate::codec::{decode, encode};
 use crate::config::{
     credential_key, derive_pwd, AutoSave, Credential, KdfParams, KdfRepr, LockMode,
 };
-use crate::crypto::{
-    aead_decrypt, aead_encrypt, gen_salt, header_aad, value_aad, SecretKey,
-};
+use crate::crypto::{aead_decrypt, aead_encrypt, gen_salt, header_aad, value_aad, SecretKey};
 use crate::error::{Error, Result};
 use crate::format::{
     acquire_lock, atomic_write, lock_path_for, now_secs, Entry, Store, StoreFile, StoreFileRef,
@@ -160,7 +158,9 @@ impl Builder {
             .map_err(|e| Error::Corrupt(format!("cannot deserialize store: {e}")))?;
 
         if sf.magic != MAGIC {
-            return Err(Error::Corrupt("not a microkv store (bad magic)".to_string()));
+            return Err(Error::Corrupt(
+                "not a microkv store (bad magic)".to_string(),
+            ));
         }
         if sf.version != FORMAT_VERSION {
             return Err(Error::UnsupportedVersion {

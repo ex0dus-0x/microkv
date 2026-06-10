@@ -43,8 +43,16 @@ impl Drop for Credential {
 /// factor can evolve without invalidating existing databases.
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) enum KdfRepr {
-    Scrypt { log_n: u8, r: u32, p: u32 },
-    Argon2id { m_cost: u32, t_cost: u32, p_cost: u32 },
+    Scrypt {
+        log_n: u8,
+        r: u32,
+        p: u32,
+    },
+    Argon2id {
+        m_cost: u32,
+        t_cost: u32,
+        p_cost: u32,
+    },
 }
 
 /// Public, opaque handle to a set of KDF parameters.

@@ -21,10 +21,10 @@ mod config;
 mod crypto;
 mod error;
 mod format;
+mod secret;
 mod store;
 mod tree;
 mod txn;
-mod secret;
 
 pub use crate::config::{AutoSave, Credential, KdfParams, LockMode};
 pub use crate::error::{Error, Result};

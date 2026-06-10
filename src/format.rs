@@ -77,11 +77,7 @@ pub(crate) fn lock_path_for(path: &Path) -> PathBuf {
 
 /// Acquire a cross-process file lock on the store's `.lock` sidecar, returning the held
 /// handle (kept alive for the store's lifetime). `LockMode::None` is a no-op.
-pub(crate) fn acquire_lock(
-    path: &Path,
-    mode: LockMode,
-    read_only: bool,
-) -> Result<Option<File>> {
+pub(crate) fn acquire_lock(path: &Path, mode: LockMode, read_only: bool) -> Result<Option<File>> {
     if matches!(mode, LockMode::None) {
         return Ok(None);
     }
