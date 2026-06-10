@@ -1,7 +1,7 @@
 [package]
 name = "microkv"
-description = "a minimal and persistent key-value store designed with security in mind."
-version = "0.2.9"
+description = "secure minimal key-value store"
+version = "0.3.0"
 
 authors = ["ex0dus-0x"]
 license = "MIT"
@@ -11,16 +11,35 @@ documentation = "https://docs.rs/microkv"
 repository = "https://github.com/ex0dus-0x/microkv"
 readme = "README.md"
 
-edition = "2018"
-
-[workspace]
-members = ["cli"]
+edition = "2021"
 
 [dependencies]
-bincode = "1.2.1"
-sodiumoxide = "0.2.5"
-dirs = "3"
+indexmap = { version = "2.1", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
+chacha20poly1305 = "0.10"
+rmp-serde = "=1.1.2"
+memsec = "0.7.0"
+scrypt = { version = "0.11", default-features = false }
+getrandom = "0.2"
+zeroize = "1"
+thiserror = "1"
+fs2 = "0.4"
 
-indexmap = { version = "1.3.2", features = ["serde-1"] }
-serde = { version = "1.0", features = ["rc", "derive"] }
-secstr = { version = "0.4.0", features = ["serde"] }
+[dependencies.argon2]
+version = "0.5"
+default-features = false
+features = ["alloc"]
+optional = true
+
+# argon2 pulls base64ct transitively; pin to the last release that builds on
+# pre-edition2024 toolchains. Only compiled when the `argon2` feature is enabled.
+[dependencies.base64ct]
+version = "=1.6.0"
+optional = true
+
+[features]
+default = []
+argon2 = ["dep:argon2", "dep:base64ct"]
+# Require memory-locked key storage: fail to open rather than fall back to a zeroizing
+# heap allocation when the OS denies secure (mlock'd) allocation.
+strict-mlock = []
