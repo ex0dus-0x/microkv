@@ -8,23 +8,18 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
-    /// A required key was absent.
     #[error("key not found")]
-    NotFound,
+    KeyNotFound,
 
-    /// The supplied password or key failed verification against the store.
     #[error("incorrect password or key")]
     WrongPassword,
 
-    /// The store file is malformed, foreign, or otherwise unreadable.
     #[error("corrupt store: {0}")]
-    Corrupt(String),
+    CorruptStore(String),
 
-    /// The store was written by an incompatible format version.
     #[error("unsupported store version {found} (expected {expected})")]
-    UnsupportedVersion { found: u8, expected: u8 },
+    UnsupportedStoreVersion { found: u8, expected: u8 },
 
-    /// An encryption/decryption/authentication operation failed.
     #[error("cryptographic operation failed")]
     Crypto,
 

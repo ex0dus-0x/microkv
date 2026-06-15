@@ -1,7 +1,7 @@
 //! __microkv__ is a minimal, security-focused key-value store for sensitive data, with
 //! encrypted persistence to disk.
 //!
-//! Every store is encrypted (there is no plaintext mode): values are sealed with
+//! Every store is encrypted, with values sealed with
 //! ChaCha20-Poly1305 under a key derived from a password (scrypt, or argon2 behind a
 //! feature flag) or supplied directly. Data is organized into isolated namespaces
 //! ("trees"), persisted atomically, and key material is held in memory-locked,

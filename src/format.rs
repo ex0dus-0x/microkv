@@ -5,7 +5,6 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use fs2::FileExt;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
@@ -94,10 +93,11 @@ pub(crate) fn acquire_lock(path: &Path, mode: LockMode, read_only: bool) -> Resu
         .truncate(false)
         .open(&lock_path)?;
 
+    // std's native file locking (stable since 1.89). `try_lock` is the exclusive variant.
     let result = if read_only || matches!(mode, LockMode::Shared) {
         file.try_lock_shared()
     } else {
-        file.try_lock_exclusive()
+        file.try_lock()
     };
     result.map_err(|_| Error::Locked)?;
     Ok(Some(file))
@@ -116,7 +116,7 @@ pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
 
     let file_name = path
         .file_name()
-        .ok_or_else(|| Error::Corrupt("store path has no file name".to_string()))?;
+        .ok_or_else(|| Error::CorruptStore("store path has no file name".to_string()))?;
     let mut tmp_name = file_name.to_os_string();
     tmp_name.push(format!(".tmp.{}.{:016x}", std::process::id(), rand_u64()?));
     let tmp_path = dir.join(tmp_name);

@@ -42,7 +42,7 @@ impl Tree {
     }
 
     pub fn require<V: DeserializeOwned>(&self, key: &str) -> Result<V> {
-        self.get(key)?.ok_or(Error::NotFound)
+        self.get(key)?.ok_or(Error::KeyNotFound)
     }
 
     /// Like [`Tree::get`] but wraps the result in a non-logging [`Secret`].

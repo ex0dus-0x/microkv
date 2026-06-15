@@ -29,7 +29,7 @@ impl<'a> Txn<'a> {
     }
 
     pub fn require<V: DeserializeOwned>(&self, ns: &str, key: &str) -> Result<V> {
-        self.get(ns, key)?.ok_or(Error::NotFound)
+        self.get(ns, key)?.ok_or(Error::KeyNotFound)
     }
 
     pub fn put<V: Serialize>(&mut self, ns: &str, key: &str, value: &V) -> Result<()> {

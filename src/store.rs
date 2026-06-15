@@ -155,15 +155,15 @@ impl Builder {
 
         let raw = std::fs::read(&path)?;
         let sf: StoreFile = rmp_serde::from_slice(&raw)
-            .map_err(|e| Error::Corrupt(format!("cannot deserialize store: {e}")))?;
+            .map_err(|e| Error::CorruptStore(format!("cannot deserialize store: {e}")))?;
 
         if sf.magic != MAGIC {
-            return Err(Error::Corrupt(
+            return Err(Error::CorruptStore(
                 "not a microkv store (bad magic)".to_string(),
             ));
         }
         if sf.version != FORMAT_VERSION {
-            return Err(Error::UnsupportedVersion {
+            return Err(Error::UnsupportedStoreVersion {
                 found: sf.version,
                 expected: FORMAT_VERSION,
             });

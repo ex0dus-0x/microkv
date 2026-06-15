@@ -43,7 +43,7 @@ fn basic_crud() {
     assert!(db.remove("n").unwrap());
     assert!(!db.remove("n").unwrap());
     assert!(!db.contains("n").unwrap());
-    assert!(matches!(db.require::<u64>("n"), Err(Error::NotFound)));
+    assert!(matches!(db.require::<u64>("n"), Err(Error::KeyNotFound)));
 
     let user = User {
         id: 7,
@@ -116,7 +116,7 @@ fn transaction_commits_and_rolls_back() {
     // failing transaction rolls back every mutation
     let res: Result<(), Error> = db.transaction(|tx| {
         tx.put("", "balance", &0u64)?;
-        Err(Error::NotFound)
+        Err(Error::KeyNotFound)
     });
     assert!(res.is_err());
     assert_eq!(db.require::<u64>("balance").unwrap(), 90); // unchanged
@@ -220,7 +220,7 @@ fn rejects_corrupt_and_wrong_version() {
     let path = temp("corrupt");
     std::fs::write(&path, b"definitely not msgpack microkv").unwrap();
     let err = MicroKV::open(&path, Credential::password(PASSWORD)).unwrap_err();
-    assert!(matches!(err, Error::Corrupt(_)));
+    assert!(matches!(err, Error::CorruptStore(_)));
     let _ = std::fs::remove_file(&path);
 }
 

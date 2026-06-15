@@ -135,7 +135,7 @@ pub(crate) fn derive_pwd(pwd: &[u8], kdf: &KdfRepr, salt: &[u8]) -> Result<[u8; 
     match kdf {
         KdfRepr::Scrypt { log_n, r, p } => {
             let params = scrypt::Params::new(*log_n, *r, *p, KEY_LEN)
-                .map_err(|_| Error::Corrupt("invalid scrypt parameters".to_string()))?;
+                .map_err(|_| Error::CorruptStore("invalid scrypt parameters".to_string()))?;
             scrypt::scrypt(pwd, salt, &params, &mut key).map_err(|_| Error::Crypto)?;
         }
         KdfRepr::Argon2id {
@@ -147,7 +147,7 @@ pub(crate) fn derive_pwd(pwd: &[u8], kdf: &KdfRepr, salt: &[u8]) -> Result<[u8; 
             {
                 use argon2::{Algorithm, Argon2, Params as AParams, Version};
                 let params = AParams::new(*m_cost, *t_cost, *p_cost, Some(KEY_LEN))
-                    .map_err(|_| Error::Corrupt("invalid argon2 parameters".to_string()))?;
+                    .map_err(|_| Error::CorruptStore("invalid argon2 parameters".to_string()))?;
                 let a = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
                 a.hash_password_into(pwd, salt, &mut key)
                     .map_err(|_| Error::Crypto)?;
@@ -155,7 +155,7 @@ pub(crate) fn derive_pwd(pwd: &[u8], kdf: &KdfRepr, salt: &[u8]) -> Result<[u8; 
             #[cfg(not(feature = "argon2"))]
             {
                 let _ = (m_cost, t_cost, p_cost);
-                return Err(Error::Corrupt(
+                return Err(Error::CorruptStore(
                     "store uses argon2 but the 'argon2' feature is disabled".to_string(),
                 ));
             }
