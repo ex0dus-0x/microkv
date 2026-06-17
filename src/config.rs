@@ -1,5 +1,4 @@
-//! Public configuration: how to unlock a store, how keys are derived, and store
-//! persistence/locking policies.
+//! Public config types and key derivation.
 
 use std::time::Duration;
 
@@ -10,21 +9,20 @@ use crate::crypto::KEY_LEN;
 use crate::error::{Error, Result};
 use crate::secret::SecretString;
 
-/// How to unlock a store. There is no plaintext option — encryption is mandatory.
+/// How to unlock a store. Encryption is mandatory — there is no plaintext option.
 pub enum Credential {
-    /// Derive the key from a password using the store's KDF and salt.
+    /// Derived from a password via the store's KDF + salt.
     Password(SecretString),
-    /// Use a caller-supplied 32-byte key directly (e.g. from a KMS or keyring).
+    /// A raw 32-byte key (e.g. from a KMS or keyring).
     Key([u8; KEY_LEN]),
 }
 
 impl Credential {
-    /// Build a password credential from anything convertible into a [`SecretString`].
-    pub fn password(pwd: impl Into<SecretString>) -> Self {
-        Credential::Password(pwd.into())
+    /// Wrap a password in a zeroizing [`SecretString`].
+    pub fn password(pwd: impl Into<String>) -> Self {
+        Credential::Password(SecretString::new(pwd.into()))
     }
 
-    /// Build a credential from a raw 32-byte key.
     pub fn key(key: [u8; KEY_LEN]) -> Self {
         Credential::Key(key)
     }
@@ -39,8 +37,8 @@ impl Drop for Credential {
     }
 }
 
-/// Key-derivation algorithm + cost parameters, persisted in the store header so the work
-/// factor can evolve without invalidating existing databases.
+/// KDF algorithm + cost, persisted in the header so the work factor can change without
+/// breaking existing stores.
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) enum KdfRepr {
     Scrypt {
@@ -55,27 +53,26 @@ pub(crate) enum KdfRepr {
     },
 }
 
-/// Public, opaque handle to a set of KDF parameters.
+/// Opaque KDF parameters.
 #[derive(Clone)]
 pub struct KdfParams(pub(crate) KdfRepr);
 
 impl KdfParams {
-    /// scrypt with explicit parameters (`log_n`, `r`, `p`).
     pub fn scrypt(log_n: u8, r: u32, p: u32) -> Self {
         KdfParams(KdfRepr::Scrypt { log_n, r, p })
     }
 
-    /// Interactive cost: ~32 MiB, fast enough for per-open use (default).
+    /// ~32 MiB; fast enough per-open (default).
     pub fn interactive() -> Self {
         KdfParams::scrypt(15, 8, 1)
     }
 
-    /// Sensitive cost: ~128 MiB, for secrets that sit at rest.
+    /// ~128 MiB; for secrets at rest.
     pub fn sensitive() -> Self {
         KdfParams::scrypt(17, 8, 1)
     }
 
-    /// Argon2id with explicit parameters. Requires the `argon2` feature.
+    /// Requires the `argon2` feature.
     #[cfg(feature = "argon2")]
     pub fn argon2id(m_cost: u32, t_cost: u32, p_cost: u32) -> Self {
         KdfParams(KdfRepr::Argon2id {
@@ -92,44 +89,50 @@ impl Default for KdfParams {
     }
 }
 
-/// When the store flushes to disk automatically.
-#[derive(Clone, Copy)]
+/// When to flush to disk.
+#[derive(Clone, Copy, Default)]
 pub enum AutoSave {
-    /// Never auto-save; the caller must invoke `MicroKV::save`.
+    /// Only on an explicit `MicroKV::save`.
+    #[default]
     Manual,
-    /// Persist after every successful write.
     OnEveryWrite,
-    /// Persist on a write only if at least this much time has elapsed since the last save.
+    /// Save on a write if this much time has passed since the last save.
     Periodic(Duration),
-    /// Persist once, when the last handle is dropped.
+    /// Save when the last handle drops.
     OnDrop,
 }
 
-/// Cross-process file locking applied on open (via a sidecar `.lock` file).
-#[derive(Clone, Copy)]
+/// Cross-process locking, via a sidecar `.lock` file.
+#[derive(Clone, Copy, Default)]
 pub enum LockMode {
-    /// No file locking.
+    #[default]
     None,
-    /// Shared (multiple-reader) lock.
     Shared,
-    /// Exclusive (single-writer) lock.
     Exclusive,
 }
 
-/// Derive the 32-byte symmetric key for a credential. Raw keys are used as-is;
-/// passwords are stretched with the store's KDF over its salt.
+/// Open-time knobs. Everything defaults: `Config { read_only: true, ..Default::default() }`.
+#[derive(Clone, Default)]
+pub struct Config {
+    /// Stamped into *new* stores only; ignored when opening an existing one.
+    pub kdf: KdfParams,
+    pub autosave: AutoSave,
+    pub lock_mode: LockMode,
+    pub read_only: bool,
+}
+
+/// The 32-byte key for a credential: raw keys as-is, passwords run through the KDF.
 pub(crate) fn credential_key(
     cred: &Credential,
     kdf: &KdfRepr,
     salt: &[u8],
 ) -> Result<[u8; KEY_LEN]> {
     match cred {
-        Credential::Password(pwd) => derive_pwd(pwd.expose().as_bytes(), kdf, salt),
+        Credential::Password(pwd) => derive_pwd(pwd.as_bytes(), kdf, salt),
         Credential::Key(key) => Ok(*key),
     }
 }
 
-/// Stretch a password into a 32-byte key with the configured KDF.
 pub(crate) fn derive_pwd(pwd: &[u8], kdf: &KdfRepr, salt: &[u8]) -> Result<[u8; KEY_LEN]> {
     let mut key = [0u8; KEY_LEN];
     match kdf {

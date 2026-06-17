@@ -26,9 +26,9 @@ mod store;
 mod tree;
 mod txn;
 
-pub use crate::config::{AutoSave, Credential, KdfParams, LockMode};
+pub use crate::config::{AutoSave, Config, Credential, KdfParams, LockMode};
 pub use crate::error::{Error, Result};
 pub use crate::secret::{Secret, SecretString};
-pub use crate::store::{Builder, MicroKV};
+pub use crate::store::MicroKV;
 pub use crate::tree::Tree;
 pub use crate::txn::Txn;

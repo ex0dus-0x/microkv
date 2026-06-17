@@ -1,4 +1,4 @@
-//! On-disk store format (version 2) and the durable, crash-safe persistence helpers.
+//! On-disk format and crash-safe persistence.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -12,32 +12,29 @@ use crate::config::{KdfRepr, LockMode};
 use crate::crypto::{rand_u64, SALT_LEN};
 use crate::error::{Error, Result};
 
-/// Magic string at the head of every store file, used to reject foreign files.
+/// File magic; rejects foreign files.
 pub(crate) const MAGIC: &str = "microkv";
 
-/// Current on-disk format version.
 pub(crate) const FORMAT_VERSION: u8 = 3;
 
-/// Plaintext sealed under the derived key (with the header as associated data) to form a
-/// password verifier and authenticate the header.
+/// Sealed under the key with the header as AAD: doubles as the password verifier and
+/// authenticates the header.
 pub(crate) const VERIFIER_PLAINTEXT: &[u8] = b"microkv/verify/v3";
 
-/// A single stored entry: a per-value nonce and AEAD ciphertext bound to its
-/// `(namespace, key)`. The plaintext payload carries the value plus any expiry, so the
-/// expiry is encrypted and authenticated rather than sitting in the clear.
+/// A stored entry: per-value nonce + AEAD ciphertext bound to its `(namespace, key)`. The
+/// plaintext holds the value *and* any expiry, so expiry is encrypted and authenticated.
 #[derive(Clone, Serialize, Deserialize)]
 pub(crate) struct Entry {
     pub(crate) nonce: [u8; 12],
     pub(crate) data: Vec<u8>,
 }
 
-/// One namespace's keyspace.
 pub(crate) type Bucket = IndexMap<String, Entry>;
 
-/// The whole store: namespace name -> bucket. The empty string is the default namespace.
+/// namespace -> bucket; the empty string is the default namespace.
 pub(crate) type Store = IndexMap<String, Bucket>;
 
-/// Borrowed view of the store written to disk.
+/// Borrowed for writing (avoids cloning); see [`StoreFile`] for the owned read side.
 #[derive(Serialize)]
 pub(crate) struct StoreFileRef<'a> {
     pub(crate) magic: &'a str,
@@ -48,7 +45,7 @@ pub(crate) struct StoreFileRef<'a> {
     pub(crate) trees: &'a Store,
 }
 
-/// Owned store read back from disk.
+/// Owned, read back from disk.
 #[derive(Deserialize)]
 pub(crate) struct StoreFile {
     pub(crate) magic: String,
@@ -59,7 +56,6 @@ pub(crate) struct StoreFile {
     pub(crate) trees: Store,
 }
 
-/// Seconds since the Unix epoch.
 pub(crate) fn now_secs() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -67,15 +63,14 @@ pub(crate) fn now_secs() -> u64 {
         .unwrap_or(0)
 }
 
-/// The sidecar lock-file path for a store path.
 pub(crate) fn lock_path_for(path: &Path) -> PathBuf {
     let mut s = path.as_os_str().to_os_string();
     s.push(".lock");
     PathBuf::from(s)
 }
 
-/// Acquire a cross-process file lock on the store's `.lock` sidecar, returning the held
-/// handle (kept alive for the store's lifetime). `LockMode::None` is a no-op.
+/// Lock the `.lock` sidecar; the returned handle must outlive the store. No-op for
+/// [`LockMode::None`].
 pub(crate) fn acquire_lock(path: &Path, mode: LockMode, read_only: bool) -> Result<Option<File>> {
     if matches!(mode, LockMode::None) {
         return Ok(None);
@@ -103,8 +98,8 @@ pub(crate) fn acquire_lock(path: &Path, mode: LockMode, read_only: bool) -> Resu
     Ok(Some(file))
 }
 
-/// Durably write `bytes` to `path` via a same-directory temp file + fsync + atomic rename
-/// + parent-dir fsync. A crash leaves either the old or the new complete file.
+/// Write via temp file + fsync + rename + dir fsync, so a crash leaves either the old or
+/// the new complete file — never a torn one.
 pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     let dir = match path.parent() {
         Some(p) if !p.as_os_str().is_empty() => p,

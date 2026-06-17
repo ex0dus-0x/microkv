@@ -1,8 +1,7 @@
-//! The database handle ([`MicroKV`]), its shared internal state, the [`Builder`], and
-//! the store-wide operations: opening, persistence, transactions, and key rotation.
+//! The database handle ([`MicroKV`]), its shared internal state, and the store-wide
+//! operations: opening (via [`Config`]), persistence, transactions, and key rotation.
 
 use std::fs::File;
-use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -13,20 +12,18 @@ use serde::Serialize;
 use zeroize::Zeroize;
 
 use crate::codec::{decode, encode};
-use crate::config::{
-    credential_key, derive_pwd, AutoSave, Credential, KdfParams, KdfRepr, LockMode,
-};
+use crate::config::{credential_key, derive_pwd, AutoSave, Config, Credential, KdfParams, KdfRepr};
 use crate::crypto::{aead_decrypt, aead_encrypt, gen_salt, header_aad, value_aad, SecretKey};
 use crate::error::{Error, Result};
 use crate::format::{
     acquire_lock, atomic_write, lock_path_for, now_secs, Entry, Store, StoreFile, StoreFileRef,
     FORMAT_VERSION, MAGIC, VERIFIER_PLAINTEXT,
 };
-use crate::secret::{Secret, SecretString};
+use crate::secret::SecretString;
 use crate::tree::Tree;
 use crate::txn::Txn;
 
-/// Mutable cryptographic state, behind its own lock so password rotation can swap it.
+/// Crypto state behind its own lock, so `rekey` can swap it.
 struct Crypto {
     key: SecretKey,
     kdf: KdfRepr,
@@ -49,9 +46,21 @@ pub(crate) struct Inner {
 }
 
 /// The database handle. Cheap to clone (`Arc`-backed); all clones share one store.
+///
+/// Operations on the default namespace (`get`, `put`, `keys`, …) are available directly
+/// via `Deref` to the default [`Tree`]; store-wide operations (`namespace`,
+/// `transaction`, `save`, `rekey`, …) are inherent methods.
 #[derive(Clone)]
 pub struct MicroKV {
     pub(crate) inner: Arc<Inner>,
+    default: Tree,
+}
+
+impl std::ops::Deref for MicroKV {
+    type Target = Tree;
+    fn deref(&self) -> &Tree {
+        &self.default
+    }
 }
 
 // Redacted debug output: never prints the key, salt, verifier, or stored values.
@@ -64,7 +73,7 @@ impl std::fmt::Debug for MicroKV {
     }
 }
 
-/* ============================ Builder ============================ */
+/* ============================ Constructors ============================ */
 
 enum OpenMode {
     OpenOrCreate,
@@ -72,66 +81,84 @@ enum OpenMode {
     MustCreate,
 }
 
-/// Configures and opens a [`MicroKV`] store. Configuration is infallible and
-/// reorderable; the single fallible act is [`Builder::open`].
-pub struct Builder {
-    path: Option<PathBuf>,
-    kdf: KdfParams,
-    autosave: AutoSave,
-    lock_mode: LockMode,
-    read_only: bool,
-    mode: OpenMode,
-}
-
-impl Default for Builder {
-    fn default() -> Self {
-        Builder {
-            path: None,
-            kdf: KdfParams::default(),
-            autosave: AutoSave::Manual,
-            lock_mode: LockMode::None,
-            read_only: false,
-            mode: OpenMode::OpenOrCreate,
-        }
-    }
-}
-
-impl Builder {
-    /// Persist to `path`. Absent ⇒ in-memory only.
-    pub fn path(mut self, path: impl AsRef<Path>) -> Self {
-        self.path = Some(path.as_ref().to_path_buf());
-        self
+impl MicroKV {
+    /// Caches a default-namespace tree so `MicroKV` can `Deref` to it.
+    fn from_inner(inner: Arc<Inner>) -> Self {
+        let default = Tree::new(Arc::clone(&inner), String::new());
+        MicroKV { inner, default }
     }
 
-    /// KDF parameters stamped into *new* stores (ignored when opening an existing one).
-    pub fn kdf(mut self, kdf: KdfParams) -> Self {
-        self.kdf = kdf;
-        self
+    pub fn in_memory(cred: Credential) -> Result<Self> {
+        Self::build(None, OpenMode::OpenOrCreate, cred, Config::default())
     }
 
-    /// Auto-save policy.
-    pub fn autosave(mut self, policy: AutoSave) -> Self {
-        self.autosave = policy;
-        self
+    pub fn in_memory_with(cred: Credential, config: Config) -> Result<Self> {
+        Self::build(None, OpenMode::OpenOrCreate, cred, config)
     }
 
-    /// Cross-process file lock to acquire on open.
-    pub fn lock_mode(mut self, mode: LockMode) -> Self {
-        self.lock_mode = mode;
-        self
+    /// Open, creating the store if it doesn't exist.
+    pub fn open(path: impl AsRef<Path>, cred: Credential) -> Result<Self> {
+        Self::build(
+            Some(to_path(path)),
+            OpenMode::OpenOrCreate,
+            cred,
+            Config::default(),
+        )
     }
 
-    /// Open read-only: all writes return [`Error::ReadOnly`].
-    pub fn read_only(mut self, yes: bool) -> Self {
-        self.read_only = yes;
-        self
+    /// [`MicroKV::open`] with explicit [`Config`].
+    pub fn open_with(path: impl AsRef<Path>, cred: Credential, config: Config) -> Result<Self> {
+        Self::build(Some(to_path(path)), OpenMode::OpenOrCreate, cred, config)
     }
 
-    /// Open (or create) the store with the given credential. The one fallible call.
-    pub fn open(self, cred: Credential) -> Result<MicroKV> {
-        let exists = self.path.as_ref().map(|p| p.is_file()).unwrap_or(false);
+    /// Fails if the store doesn't exist.
+    pub fn open_existing(path: impl AsRef<Path>, cred: Credential) -> Result<Self> {
+        Self::build(
+            Some(to_path(path)),
+            OpenMode::MustExist,
+            cred,
+            Config::default(),
+        )
+    }
 
-        match self.mode {
+    /// [`MicroKV::open_existing`] with explicit [`Config`].
+    pub fn open_existing_with(
+        path: impl AsRef<Path>,
+        cred: Credential,
+        config: Config,
+    ) -> Result<Self> {
+        Self::build(Some(to_path(path)), OpenMode::MustExist, cred, config)
+    }
+
+    /// Fails if the store already exists.
+    pub fn create_new(path: impl AsRef<Path>, cred: Credential) -> Result<Self> {
+        Self::build(
+            Some(to_path(path)),
+            OpenMode::MustCreate,
+            cred,
+            Config::default(),
+        )
+    }
+
+    /// [`MicroKV::create_new`] with explicit [`Config`].
+    pub fn create_new_with(
+        path: impl AsRef<Path>,
+        cred: Credential,
+        config: Config,
+    ) -> Result<Self> {
+        Self::build(Some(to_path(path)), OpenMode::MustCreate, cred, config)
+    }
+
+    /// Enforce the mode, then read or create.
+    fn build(
+        path: Option<PathBuf>,
+        mode: OpenMode,
+        cred: Credential,
+        config: Config,
+    ) -> Result<Self> {
+        let exists = path.as_ref().map(|p| p.is_file()).unwrap_or(false);
+
+        match mode {
             OpenMode::MustExist if !exists => {
                 return Err(Error::Io(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
@@ -143,15 +170,14 @@ impl Builder {
         }
 
         if exists {
-            self.open_existing_file(cred)
+            Self::open_existing_file(path.expect("existing path implies Some"), cred, config)
         } else {
-            self.create(cred)
+            Self::create(path, cred, config)
         }
     }
 
-    fn open_existing_file(self, cred: Credential) -> Result<MicroKV> {
-        let path = self.path.clone().expect("existing path implies Some");
-        let file_lock = acquire_lock(&path, self.lock_mode, self.read_only)?;
+    fn open_existing_file(path: PathBuf, cred: Credential, config: Config) -> Result<Self> {
+        let file_lock = acquire_lock(&path, config.lock_mode, config.read_only)?;
 
         let raw = std::fs::read(&path)?;
         let sf: StoreFile = rmp_serde::from_slice(&raw)
@@ -186,28 +212,26 @@ impl Builder {
             return Err(Error::WrongPassword);
         }
 
-        Ok(MicroKV {
-            inner: Arc::new(Inner {
-                storage: RwLock::new(sf.trees),
-                crypto: RwLock::new(Crypto {
-                    key: secret,
-                    kdf: sf.kdf,
-                    salt: sf.salt,
-                    verifier: sf.verifier,
-                }),
-                path: Some(path),
-                autosave: self.autosave,
-                read_only: self.read_only,
-                commit_lock: Mutex::new(()),
-                dirty: AtomicBool::new(false),
-                last_save: Mutex::new(Instant::now()),
-                _file_lock: file_lock,
+        Ok(MicroKV::from_inner(Arc::new(Inner {
+            storage: RwLock::new(sf.trees),
+            crypto: RwLock::new(Crypto {
+                key: secret,
+                kdf: sf.kdf,
+                salt: sf.salt,
+                verifier: sf.verifier,
             }),
-        })
+            path: Some(path),
+            autosave: config.autosave,
+            read_only: config.read_only,
+            commit_lock: Mutex::new(()),
+            dirty: AtomicBool::new(false),
+            last_save: Mutex::new(Instant::now()),
+            _file_lock: file_lock,
+        })))
     }
 
-    fn create(self, cred: Credential) -> Result<MicroKV> {
-        let kdf = self.kdf.0.clone();
+    fn create(path: Option<PathBuf>, cred: Credential, config: Config) -> Result<Self> {
+        let kdf = config.kdf.0.clone();
         let salt = gen_salt()?;
 
         let mut key_bytes = credential_key(&cred, &kdf, &salt)?;
@@ -219,169 +243,59 @@ impl Builder {
         let (nonce, data) = aead_encrypt(&secret.cipher(), &header, VERIFIER_PLAINTEXT)?;
         let verifier = Entry { nonce, data };
 
-        let file_lock = match &self.path {
-            Some(p) => acquire_lock(p, self.lock_mode, self.read_only)?,
+        let file_lock = match &path {
+            Some(p) => acquire_lock(p, config.lock_mode, config.read_only)?,
             None => None,
         };
 
-        let db = MicroKV {
-            inner: Arc::new(Inner {
-                storage: RwLock::new(Store::new()),
-                crypto: RwLock::new(Crypto {
-                    key: secret,
-                    kdf,
-                    salt,
-                    verifier,
-                }),
-                path: self.path.clone(),
-                autosave: self.autosave,
-                read_only: self.read_only,
-                commit_lock: Mutex::new(()),
-                dirty: AtomicBool::new(false),
-                last_save: Mutex::new(Instant::now()),
-                _file_lock: file_lock,
+        let db = MicroKV::from_inner(Arc::new(Inner {
+            storage: RwLock::new(Store::new()),
+            crypto: RwLock::new(Crypto {
+                key: secret,
+                kdf,
+                salt,
+                verifier,
             }),
-        };
+            path,
+            autosave: config.autosave,
+            read_only: config.read_only,
+            commit_lock: Mutex::new(()),
+            dirty: AtomicBool::new(false),
+            last_save: Mutex::new(Instant::now()),
+            _file_lock: file_lock,
+        }));
 
         // Materialize a new store on disk immediately so the header exists.
-        if db.inner.path.is_some() && !self.read_only {
+        if db.inner.path.is_some() && !config.read_only {
             db.inner.persist()?;
         }
 
         Ok(db)
     }
-}
-
-/* ============================ Constructors ============================ */
-
-impl MicroKV {
-    /// Start configuring a store.
-    pub fn builder() -> Builder {
-        Builder::default()
-    }
-
-    /// Create an in-memory-only store (no persistence).
-    pub fn in_memory(cred: Credential) -> Result<Self> {
-        Builder::default().open(cred)
-    }
-
-    /// Open the store at `path`, creating it if absent.
-    pub fn open(path: impl AsRef<Path>, cred: Credential) -> Result<Self> {
-        Builder::default().path(path).open(cred)
-    }
-
-    /// Open the store at `path`, failing if it does not exist.
-    pub fn open_existing(path: impl AsRef<Path>, cred: Credential) -> Result<Self> {
-        let mut b = Builder::default().path(path);
-        b.mode = OpenMode::MustExist;
-        b.open(cred)
-    }
-
-    /// Create a new store at `path`, failing if it already exists.
-    pub fn create_new(path: impl AsRef<Path>, cred: Credential) -> Result<Self> {
-        let mut b = Builder::default().path(path);
-        b.mode = OpenMode::MustCreate;
-        b.open(cred)
-    }
 
     /* ============================ Trees / namespaces ============================ */
 
-    /// Get a handle to an isolated namespace. Keys in different namespaces never collide,
-    /// and a value's ciphertext is bound to its namespace.
+    /// An isolated namespace: keys never collide across namespaces, and each value's
+    /// ciphertext is bound to its namespace. `MicroKV` derefs to the default (`""`) one.
     pub fn namespace(&self, name: impl AsRef<str>) -> Tree {
-        Tree::new(self.clone(), name.as_ref().to_string())
+        Tree::new(Arc::clone(&self.inner), name.as_ref().to_string())
     }
 
-    /// Handle to the default (unnamed) namespace.
-    pub fn default_tree(&self) -> Tree {
-        self.namespace("")
-    }
-
-    /// List the namespaces that currently hold data.
+    /// Namespaces that currently hold data.
     pub fn tree_names(&self) -> Result<Vec<String>> {
         let g = self.inner.read_store()?;
         Ok(g.keys().cloned().collect())
     }
 
-    /* ============================ Default-namespace forwards ============================ */
-
-    pub fn get<V: DeserializeOwned>(&self, key: &str) -> Result<Option<V>> {
-        self.default_tree().get(key)
-    }
-    pub fn require<V: DeserializeOwned>(&self, key: &str) -> Result<V> {
-        self.default_tree().require(key)
-    }
-    pub fn get_secret<V: DeserializeOwned>(&self, key: &str) -> Result<Option<Secret<V>>> {
-        self.default_tree().get_secret(key)
-    }
-    pub fn put<V: Serialize>(&self, key: &str, value: &V) -> Result<()> {
-        self.default_tree().put(key, value)
-    }
-    pub fn put_with_ttl<V: Serialize>(&self, key: &str, value: &V, ttl: Duration) -> Result<()> {
-        self.default_tree().put_with_ttl(key, value, ttl)
-    }
-    pub fn remove(&self, key: &str) -> Result<bool> {
-        self.default_tree().remove(key)
-    }
-    pub fn contains(&self, key: &str) -> Result<bool> {
-        self.default_tree().contains(key)
-    }
-    pub fn len(&self) -> Result<usize> {
-        self.default_tree().len()
-    }
-    pub fn is_empty(&self) -> Result<bool> {
-        self.default_tree().is_empty()
-    }
-    pub fn update<V, F>(&self, key: &str, f: F) -> Result<()>
-    where
-        V: Serialize + DeserializeOwned,
-        F: FnOnce(Option<V>) -> Option<V>,
-    {
-        self.default_tree().update(key, f)
-    }
-    pub fn get_or_insert_with<V, F>(&self, key: &str, f: F) -> Result<V>
-    where
-        V: Serialize + DeserializeOwned,
-        F: FnOnce() -> V,
-    {
-        self.default_tree().get_or_insert_with(key, f)
-    }
-    pub fn compare_and_swap<V: Serialize + DeserializeOwned>(
-        &self,
-        key: &str,
-        expected: Option<&V>,
-        new: Option<&V>,
-    ) -> Result<bool> {
-        self.default_tree().compare_and_swap(key, expected, new)
-    }
-    pub fn keys(&self) -> Result<Vec<String>> {
-        self.default_tree().keys()
-    }
-    pub fn keys_sorted(&self) -> Result<Vec<String>> {
-        self.default_tree().keys_sorted()
-    }
-    pub fn prefix<V: DeserializeOwned>(&self, prefix: &str) -> Result<Vec<(String, V)>> {
-        self.default_tree().prefix(prefix)
-    }
-    pub fn for_each<V, F>(&self, f: F) -> Result<()>
-    where
-        V: DeserializeOwned,
-        F: FnMut(&str, V) -> ControlFlow<()>,
-    {
-        self.default_tree().for_each(f)
-    }
-
     /* ============================ Transactions ============================ */
 
-    /// Run a sequence of operations under a single write lock. All mutations apply to a
-    /// working copy; on `Ok` they are committed (and auto-saved per policy) atomically,
-    /// on `Err` they are discarded (rollback). Namespaces are addressed explicitly — use
-    /// `""` for the default.
+    /// Run ops under one write lock against a working copy: commit on `Ok`, roll back on
+    /// `Err`. Namespaces are explicit (`""` is the default).
     pub fn transaction<F, R>(&self, f: F) -> Result<R>
     where
         F: FnOnce(&mut Txn) -> Result<R>,
     {
-        self.ensure_writable()?;
+        self.inner.ensure_writable()?;
 
         let mut guard = self.inner.write_store()?;
         let mut working = guard.clone();
@@ -391,7 +305,7 @@ impl MicroKV {
             Ok(result) => {
                 *guard = working;
                 drop(guard);
-                self.after_write()?;
+                self.inner.after_write()?;
                 Ok(result)
             }
             Err(e) => Err(e), // working discarded; guard left unchanged
@@ -400,7 +314,6 @@ impl MicroKV {
 
     /* ============================ Security / admin ============================ */
 
-    /// The KDF parameters currently in effect.
     pub fn kdf_params(&self) -> KdfParams {
         self.inner
             .crypto
@@ -409,12 +322,12 @@ impl MicroKV {
             .unwrap_or_else(|_| KdfParams::interactive())
     }
 
-    /// Change the password: verifies `old`, then re-derives and re-encrypts everything
-    /// under `new` with a fresh salt.
-    pub fn change_password(&self, old: SecretString, new: SecretString) -> Result<()> {
+    /// Verify `old`, then re-key everything under `new`.
+    pub fn change_password(&self, old: impl Into<String>, new: impl Into<String>) -> Result<()> {
+        let old = SecretString::new(old.into());
         {
             let c = self.inner.crypto.read().map_err(|_| Error::Locked)?;
-            let mut probe = derive_pwd(old.expose().as_bytes(), &c.kdf, &c.salt)?;
+            let mut probe = derive_pwd(old.as_bytes(), &c.kdf, &c.salt)?;
             let probe_key = SecretKey::new(probe)?;
             probe.zeroize();
             let header = header_aad(&c.kdf, &c.salt)?;
@@ -430,13 +343,12 @@ impl MicroKV {
                 return Err(Error::WrongPassword);
             }
         }
-        self.rekey(Credential::Password(new))
+        self.rekey(Credential::Password(SecretString::new(new.into())))
     }
 
-    /// Re-key the store: re-derive the key from `new` (fresh salt, same KDF params) and
-    /// re-encrypt every entry and the verifier under it.
+    /// Re-derive the key from `new` (fresh salt) and re-encrypt every entry + the verifier.
     pub fn rekey(&self, new: Credential) -> Result<()> {
-        self.ensure_writable()?;
+        self.inner.ensure_writable()?;
         let new_salt = gen_salt()?;
 
         {
@@ -474,38 +386,30 @@ impl MicroKV {
             };
         }
 
-        self.after_write()
+        self.inner.after_write()
     }
 
     /* ============================ Persistence ============================ */
 
-    /// Persist the store to its associated path (errors for in-memory stores).
+    /// Persist to the store's path; errors ([`Error::NoPath`]) for in-memory stores.
     pub fn save(&self) -> Result<()> {
-        if self.inner.read_only {
-            return Err(Error::ReadOnly);
-        }
-        self.inner.persist()?;
-        self.inner.dirty.store(false, Ordering::Release);
-        if let Ok(mut last) = self.inner.last_save.lock() {
-            *last = Instant::now();
-        }
-        Ok(())
+        self.inner.save()
     }
 
-    /// Persist a copy to a different path without changing the store's own path.
+    /// Persist a copy elsewhere, leaving the store's own path unchanged.
     pub fn save_as(&self, path: impl AsRef<Path>) -> Result<()> {
         let bytes = self.inner.serialize()?;
         atomic_write(path.as_ref(), &bytes)
     }
 
-    /// Serialize the encrypted store to bytes without touching the filesystem.
+    /// The encrypted store as bytes (no filesystem access).
     pub fn export(&self) -> Result<Vec<u8>> {
         self.inner.serialize()
     }
 
-    /// Clear all data and remove the persistent file (and its lock sidecar), if any.
+    /// Clear all data and delete the file + its `.lock` sidecar.
     pub fn destroy(self) -> Result<()> {
-        self.ensure_writable()?;
+        self.inner.ensure_writable()?;
         {
             let mut g = self.inner.write_store()?;
             g.clear();
@@ -522,11 +426,11 @@ impl MicroKV {
         Ok(())
     }
 
-    /// Remove all expired entries across every namespace, returning how many were purged.
-    /// Each entry is authenticated before its (encrypted) expiry is honored, so a tampered
-    /// expiry surfaces as an error rather than causing a live value to be dropped.
+    /// Drop every expired entry, returning the count. Entries are authenticated before
+    /// their (encrypted) expiry is trusted, so a tampered expiry errors instead of
+    /// dropping a live value.
     pub fn sweep_expired(&self) -> Result<usize> {
-        self.ensure_writable()?;
+        self.inner.ensure_writable()?;
         let removed = {
             let mut g = self.inner.write_store()?;
             let mut stale: Vec<(String, String)> = Vec::new();
@@ -545,29 +449,40 @@ impl MicroKV {
             stale.len()
         };
         if removed > 0 {
-            self.after_write()?;
+            self.inner.after_write()?;
         }
         Ok(removed)
     }
+}
 
-    /* ============================ Crate-internal helpers ============================ */
-
+impl Inner {
     pub(crate) fn ensure_writable(&self) -> Result<()> {
-        if self.inner.read_only {
+        if self.read_only {
             Err(Error::ReadOnly)
         } else {
             Ok(())
         }
     }
 
-    /// Run the configured auto-save policy after a successful mutation.
+    pub(crate) fn save(&self) -> Result<()> {
+        if self.read_only {
+            return Err(Error::ReadOnly);
+        }
+        self.persist()?;
+        self.dirty.store(false, Ordering::Release);
+        if let Ok(mut last) = self.last_save.lock() {
+            *last = Instant::now();
+        }
+        Ok(())
+    }
+
+    /// Apply the auto-save policy after a successful mutation.
     pub(crate) fn after_write(&self) -> Result<()> {
-        self.inner.dirty.store(true, Ordering::Release);
-        match self.inner.autosave {
+        self.dirty.store(true, Ordering::Release);
+        match self.autosave {
             AutoSave::OnEveryWrite => self.save(),
             AutoSave::Periodic(d) => {
                 let elapsed = self
-                    .inner
                     .last_save
                     .lock()
                     .map(|l| l.elapsed())
@@ -581,20 +496,16 @@ impl MicroKV {
             AutoSave::Manual | AutoSave::OnDrop => Ok(()),
         }
     }
-}
 
-impl Inner {
-    /// Acquire the storage read lock, mapping poisoning to [`Error::Locked`].
     pub(crate) fn read_store(&self) -> Result<RwLockReadGuard<'_, Store>> {
         self.storage.read().map_err(|_| Error::Locked)
     }
 
-    /// Acquire the storage write lock, mapping poisoning to [`Error::Locked`].
     pub(crate) fn write_store(&self) -> Result<RwLockWriteGuard<'_, Store>> {
         self.storage.write().map_err(|_| Error::Locked)
     }
 
-    /// Decrypt and deserialize an entry's value, honoring (authenticated) expiry.
+    /// Decrypt + deserialize an entry, honoring its authenticated expiry.
     pub(crate) fn read_value<V: DeserializeOwned>(
         &self,
         ns: &str,
@@ -629,8 +540,8 @@ impl Inner {
         atomic_write(&path, &bytes)
     }
 
-    /// Seal a value under the current key, bound to `(ns, key)` via associated data. The
-    /// expiry is framed into the plaintext, so it is encrypted and authenticated.
+    /// Seal a value, bound to `(ns, key)`. Expiry is framed into the plaintext, so it's
+    /// encrypted and authenticated too.
     pub(crate) fn seal(
         &self,
         ns: &str,
@@ -647,9 +558,8 @@ impl Inner {
         Ok(Entry { nonce, data })
     }
 
-    /// Open an entry: authenticate + decrypt, then honor the (now-authenticated) expiry.
-    /// Returns `None` if the entry has expired. Any tampering with the expiry shows up as
-    /// an authentication failure ([`Error::Crypto`]) rather than a silent change.
+    /// Authenticate + decrypt, then apply expiry (`None` if expired). Decrypting before
+    /// checking expiry means a tampered expiry fails auth rather than passing silently.
     pub(crate) fn open_entry(&self, ns: &str, key: &str, entry: &Entry) -> Result<Option<Vec<u8>>> {
         let crypto = self.crypto.read().map_err(|_| Error::Locked)?;
         let aad = value_aad(ns, key);
@@ -665,7 +575,7 @@ impl Inner {
         result
     }
 
-    /// Whether an entry is present and not expired, without exposing its value.
+    /// Present and not expired, without exposing the value.
     pub(crate) fn is_live(&self, ns: &str, key: &str, entry: &Entry) -> Result<bool> {
         match self.open_entry(ns, key, entry)? {
             Some(mut value) => {
@@ -691,8 +601,7 @@ fn frame(expires_at: Option<u64>, value: &[u8]) -> Vec<u8> {
     out
 }
 
-/// Parse a framed plaintext back into `(expiry, value)`. A malformed frame is treated as
-/// a cryptographic/corruption failure.
+/// Inverse of [`frame`]; a malformed frame counts as a crypto failure.
 fn unframe(buf: &[u8]) -> Result<(Option<u64>, Vec<u8>)> {
     match buf.first() {
         Some(0) => Ok((None, buf[1..].to_vec())),
@@ -721,12 +630,15 @@ impl Drop for Inner {
 
 /* ============================ Shared store operations ============================ */
 
-/// Clone out the entry for `(ns, key)` if present.
+fn to_path(p: impl AsRef<Path>) -> PathBuf {
+    p.as_ref().to_path_buf()
+}
+
 pub(crate) fn fetch(store: &Store, ns: &str, key: &str) -> Option<Entry> {
     store.get(ns).and_then(|b| b.get(key)).cloned()
 }
 
-/// Remove `(ns, key)`, returning whether it existed. Order of remaining keys is preserved.
+/// Returns whether the key existed; preserves the order of remaining keys.
 pub(crate) fn remove_from(store: &mut Store, ns: &str, key: &str) -> bool {
     store
         .get_mut(ns)
@@ -734,7 +646,7 @@ pub(crate) fn remove_from(store: &mut Store, ns: &str, key: &str) -> bool {
         .unwrap_or(false)
 }
 
-/// Encode, seal, and insert a value into `store` under `(ns, key)`.
+/// Encode + seal + insert under `(ns, key)`.
 pub(crate) fn seal_into<V: Serialize>(
     inner: &Inner,
     store: &mut Store,

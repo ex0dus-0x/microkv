@@ -8,9 +8,16 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use microkv::{AutoSave, Credential, Error, MicroKV};
+use microkv::{AutoSave, Config, Credential, Error, MicroKV};
 
 static PASSWORD: &str = "correct horse battery staple";
+
+fn persist_cfg() -> Config {
+    Config {
+        autosave: AutoSave::OnEveryWrite,
+        ..Default::default()
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 struct User {
@@ -143,11 +150,7 @@ fn ttl_expiry() {
 fn ttl_survives_persistence() {
     // expiry is now framed inside the ciphertext, so it must round-trip through save/open
     let path = temp("ttl_persist");
-    let db = MicroKV::builder()
-        .path(&path)
-        .autosave(AutoSave::OnEveryWrite)
-        .open(Credential::password(PASSWORD))
-        .unwrap();
+    let db = MicroKV::open_with(&path, Credential::password(PASSWORD), persist_cfg()).unwrap();
     db.put_with_ttl("live", &"v".to_string(), Duration::from_secs(3600))
         .unwrap();
     db.put_with_ttl("dead", &"v".to_string(), Duration::from_secs(0))
@@ -166,11 +169,7 @@ fn tampered_value_is_rejected() {
     // flipping any ciphertext byte (which includes the framed expiry) must fail AEAD auth
     let path = temp("tamper");
     {
-        let db = MicroKV::builder()
-            .path(&path)
-            .autosave(AutoSave::OnEveryWrite)
-            .open(Credential::password(PASSWORD))
-            .unwrap();
+        let db = MicroKV::open_with(&path, Credential::password(PASSWORD), persist_cfg()).unwrap();
         db.put("k", &"sensitive".to_string()).unwrap();
     }
 
@@ -196,11 +195,7 @@ fn tampered_value_is_rejected() {
 fn wrong_password_rejected_eagerly() {
     let path = temp("wrong_pwd");
 
-    let db = MicroKV::builder()
-        .path(&path)
-        .autosave(AutoSave::OnEveryWrite)
-        .open(Credential::password(PASSWORD))
-        .unwrap();
+    let db = MicroKV::open_with(&path, Credential::password(PASSWORD), persist_cfg()).unwrap();
     db.put("secret", &"hunter2".to_string()).unwrap();
     drop(db);
 
@@ -250,11 +245,7 @@ fn create_new_and_open_existing_modes() {
 fn persistence_round_trip() {
     let path = temp("persist");
 
-    let db = MicroKV::builder()
-        .path(&path)
-        .autosave(AutoSave::OnEveryWrite)
-        .open(Credential::password(PASSWORD))
-        .unwrap();
+    let db = MicroKV::open_with(&path, Credential::password(PASSWORD), persist_cfg()).unwrap();
     db.namespace("settings")
         .put("theme", &"dark".to_string())
         .unwrap();
@@ -275,21 +266,16 @@ fn persistence_round_trip() {
 fn change_password_then_reopen() {
     let path = temp("rekey");
 
-    let db = MicroKV::builder()
-        .path(&path)
-        .autosave(AutoSave::OnEveryWrite)
-        .open(Credential::password(PASSWORD))
-        .unwrap();
+    let db = MicroKV::open_with(&path, Credential::password(PASSWORD), persist_cfg()).unwrap();
     db.put("k", &"v".to_string()).unwrap();
 
     // wrong old password is rejected
     assert!(matches!(
-        db.change_password("nope".into(), "new-pass".into()),
+        db.change_password("nope", "new-pass"),
         Err(Error::WrongPassword)
     ));
 
-    db.change_password(PASSWORD.into(), "new-pass".into())
-        .unwrap();
+    db.change_password(PASSWORD, "new-pass").unwrap();
     drop(db);
 
     // old password no longer opens it; new one does
@@ -331,19 +317,19 @@ fn keys_prefix_and_for_each() {
 fn read_only_rejects_writes() {
     let path = temp("ro");
     {
-        let db = MicroKV::builder()
-            .path(&path)
-            .autosave(AutoSave::OnEveryWrite)
-            .open(Credential::password(PASSWORD))
-            .unwrap();
+        let db = MicroKV::open_with(&path, Credential::password(PASSWORD), persist_cfg()).unwrap();
         db.put("k", &1u32).unwrap();
     }
 
-    let db = MicroKV::builder()
-        .path(&path)
-        .read_only(true)
-        .open(Credential::password(PASSWORD))
-        .unwrap();
+    let db = MicroKV::open_with(
+        &path,
+        Credential::password(PASSWORD),
+        Config {
+            read_only: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
     assert_eq!(db.require::<u32>("k").unwrap(), 1);
     assert!(matches!(db.put("k", &2u32), Err(Error::ReadOnly)));
 
@@ -355,11 +341,7 @@ fn raw_key_credential() {
     let path = temp("rawkey");
     let key = [7u8; 32];
 
-    let db = MicroKV::builder()
-        .path(&path)
-        .autosave(AutoSave::OnEveryWrite)
-        .open(Credential::key(key))
-        .unwrap();
+    let db = MicroKV::open_with(&path, Credential::key(key), persist_cfg()).unwrap();
     db.put("k", &"value".to_string()).unwrap();
     drop(db);
 
